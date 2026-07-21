@@ -1,0 +1,7 @@
+scratch_rails/
+test_output/
+temp_extracted/
+temp_view_extracted/
+scratch/
+*.zip
+*.log
