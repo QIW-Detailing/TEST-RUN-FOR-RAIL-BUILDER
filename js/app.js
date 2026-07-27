@@ -1,4 +1,4 @@
-/**
+﻿/**
  * SteelDraft Main Application Logic
  */
 
@@ -80,9 +80,9 @@ function formatFraction(val) {
             res = `${inches}${fractionStr}"`;
         }
     }
-    return res.replace(/1\/2/g, '½')
-              .replace(/3\/4/g, '¾')
-              .replace(/1\/4/g, '¼');
+    return res.replace(/1\/2/g, '\xBD')
+              .replace(/3\/4/g, '\xBE')
+              .replace(/1\/4/g, '\xBC');
 }
 
 function consolidateBOMItems(items) {
@@ -4178,7 +4178,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (cat === 'hss_rect') {
                 if (vals.fabMethod === 'bent') {
                     currentModel = CadEngine.createCurvedHSSRectMultiView(vals.insideRadius, vals.bendAngle, vals.w, vals.h, vals.t);
-                    dimText.textContent = `Bent HSS Rect: R=${vals.insideRadius}" | Angle=${vals.bendAngle}°`;
+                    dimText.textContent = `Bent HSS Rect: R=${vals.insideRadius}" | Angle=${vals.bendAngle}Â°`;
                 } else {
                     currentModel = CadEngine.createHSSRect(vals.w, vals.h, vals.t, holeCfg);
                     dimText.textContent = `W: ${vals.w}" | H: ${vals.h}"`;
@@ -4186,7 +4186,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (cat === 'hss_circ') {
                 if (vals.fabMethod === 'bent') {
                     currentModel = CadEngine.createCurvedHSSMultiView(vals.insideRadius, vals.bendAngle, vals.d, vals.t);
-                    dimText.textContent = `Bent HSS Circ: R=${vals.insideRadius}" | Angle=${vals.bendAngle}°`;
+                    dimText.textContent = `Bent HSS Circ: R=${vals.insideRadius}" | Angle=${vals.bendAngle}Â°`;
                 } else {
                     currentModel = CadEngine.createHSSCirc(vals.d, vals.t, holeCfg);
                     dimText.textContent = `D: ${vals.d}" | T: ${vals.t}"`;
@@ -8564,7 +8564,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // --- DRAW DETAIL BOXES ---
             const formatAiscSize = (sizeStr) => {
                 if (!sizeStr || sizeStr === 'NONE') return 'None';
-                return sizeStr.replace(/1\.5/g, '1 1/2').replace(/1\/2/g, '1/2');
+                return sizeStr.replace(/1\.5/g, '1 1/2').replace(/1\/2/g, '\xBD');
             };
 
             const drawBasePlateDetail = (doc, boxX, boxY, boxW, boxH, vals) => {
@@ -9030,16 +9030,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         res = `${inches}${fractionStr}"`;
                     }
                 }
-                return res.replace(/1\/2/g, '½')
-                          .replace(/3\/4/g, '¾')
-                          .replace(/1\/4/g, '¼');
+                return res.replace(/1\/2/g, '\xBD')
+                          .replace(/3\/4/g, '\xBE')
+                          .replace(/1\/4/g, '\xBC');
             }
 
             function formatFractionWithVulgar(val) {
                 const str = formatFraction(val);
-                return str.replace(/1\/2/g, '½')
-                          .replace(/3\/4/g, '¾')
-                          .replace(/1\/4/g, '¼');
+                return str.replace(/1\/2/g, '\xBD')
+                          .replace(/3\/4/g, '\xBE')
+                          .replace(/1\/4/g, '\xBC');
             }
 
             // --- CAD TO PDF COORDINATE MAPPING HELPERS ---
@@ -9305,7 +9305,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     // If the text contains a fraction, shift it 1.8mm to the right to compensate for jsPDF unicode font spacing
                     // ONLY apply this to generic/left dimensions to avoid double-compensating right-side dimensions which are explicitly set above.
                     const isGenericOrLeft = !dimId || (!dimId.includes('right-') && !dimId.includes('-right'));
-                    if (isGenericOrLeft && activeText && (activeText.includes('½') || activeText.includes('¼') || activeText.includes('¾') || activeText.includes('/'))) {
+                    if (isGenericOrLeft && activeText && (activeText.includes('Â½') || activeText.includes('Â¼') || activeText.includes('Â¾') || activeText.includes('/'))) {
                         tx += 1.8;
                     }
 
@@ -10977,7 +10977,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     preciseLen = bboxW;
                 } else if (vals.fabMethod === 'bent') {
                     const devLen = CadEngine.calculatePlateDevelopedLength(vals.leg1, vals.leg2, plateT, vals.insideRadius, vals.bendAngle);
-                    rowDesc = `Bent Plate L1=${vals.leg1}" L2=${vals.leg2}" W=${vals.w}" x ${plateT}" BENT ${vals.bendAngle}° R=${vals.insideRadius}"`;
+                    rowDesc = `Bent Plate L1=${vals.leg1}" L2=${vals.leg2}" W=${vals.w}" x ${plateT}" BENT ${vals.bendAngle}Â° R=${vals.insideRadius}"`;
                     lenVal = formatFraction(devLen);
                     wVal = vals.w * devLen * plateT * 0.2836;
                     preciseLen = devLen;
@@ -11015,7 +11015,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 let rowDesc = desc;
                 if (isBent) {
-                    rowDesc += ` BENT ${vals.bendAngle}° R=${vals.insideRadius}"`;
+                    rowDesc += ` BENT ${vals.bendAngle}Â° R=${vals.insideRadius}"`;
                 }
                 
                 bomItems.push({
@@ -12877,7 +12877,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     desc = `Custom Plate ${formatFraction(bboxW)} x ${formatFraction(bboxH)} x ${plateT}"`;
                 } else if (vals.fabMethod === 'bent') {
                     const devLen = CadEngine.calculatePlateDevelopedLength(vals.leg1, vals.leg2, plateT, vals.insideRadius, vals.bendAngle);
-                    desc = `Bent Plate L1=${vals.leg1}" L2=${vals.leg2}" W=${vals.w}" x ${plateT}" BENT ${vals.bendAngle}° R=${vals.insideRadius}"`;
+                    desc = `Bent Plate L1=${vals.leg1}" L2=${vals.leg2}" W=${vals.w}" x ${plateT}" BENT ${vals.bendAngle}Â° R=${vals.insideRadius}"`;
                     lenVal = formatFraction(devLen);
                 } else {
                     desc = `${vals.w}" x ${vals.h}" x ${plateT}" Plate`;
@@ -13939,9 +13939,9 @@ document.addEventListener('DOMContentLoaded', () => {
         draftMembers.forEach(m => {
             let labelText = m.label || "";
             if (!labelText && m.hasHoles) {
-                labelText = `${m.holes.count}x Ø${m.holes.d}" Holes`;
+                labelText = `${m.holes.count}x Ã˜${m.holes.d}" Holes`;
                 if (m.hasBolts) {
-                    labelText += ` w/ Ø${m.bolts.d}"x${m.bolts.len}" Bolts`;
+                    labelText += ` w/ Ã˜${m.bolts.d}"x${m.bolts.len}" Bolts`;
                 }
             }
             
@@ -14055,7 +14055,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const cx = (x1 + x2) / 2;
         const cy = (y1 + y2) / 2 - 10;
         
-        const labelText = `D: ${dist.toFixed(2)}" (ΔX: ${dx.toFixed(2)}", ΔY: ${dy.toFixed(2)}")`;
+        const labelText = `D: ${dist.toFixed(2)}" (Î”X: ${dx.toFixed(2)}", Î”Y: ${dy.toFixed(2)}")`;
         
         const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
         rect.setAttribute("x", cx - labelText.length * 3.5);
@@ -16053,3 +16053,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 });
+
