@@ -1,10 +1,10 @@
 # Lightweight Static Web Server in PowerShell
-$port = 8083
+$port = 8085
 $listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add("http://localhost:$port/")
 try {
     $listener.Start()
-    Write-Host "QIW RAIL CATALOG local server started successfully!"
+    Write-Host "QIW RAIL BUILDER local server started successfully!"
     Write-Host "Open your browser and navigate to: http://localhost:$port/"
     Write-Host "Press Ctrl+C in the terminal to stop the server."
 } catch {

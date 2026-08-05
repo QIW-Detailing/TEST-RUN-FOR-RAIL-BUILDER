@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <script>
@@ -452,13 +452,20 @@
                     </div>
                     <div style="display: flex; flex-direction: column; gap: 10px;">
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-main); font-size: 0.8rem; user-select: none;">
-                            <input type="checkbox" id="chk-6-extra" style="width: 14px; height: 14px; cursor: pointer;" />
+                            <input type="checkbox" id="chk-6-extra" style="width: 14px; height: 14px; cursor: pointer;" checked />
                             <span>6" Extra</span>
                         </label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-main); font-size: 0.8rem; user-select: none;">
                             <input type="checkbox" id="chk-free-end-4" style="width: 14px; height: 14px; cursor: pointer;" />
                             <span>4" at free end</span>
                         </label>
+                        <div style="border-top: 1px dashed rgba(255,255,255,0.15); margin-top: 4px; padding-top: 8px; display: flex; flex-direction: column; gap: 8px;">
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--accent-primary, #3FC8BB); font-weight: 600; font-size: 0.8rem; user-select: none;">
+                                <input type="checkbox" id="chk-loose-post-mode" style="width: 14px; height: 14px; cursor: pointer;" />
+                                <span>Loose Post Mode</span>
+                            </label>
+                        </div>
+                        </div>
                     </div>
                 </div>
                 <!-- Floating AutoCAD Dimensioning Control Panel -->
@@ -615,10 +622,10 @@
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="js/shapes-db.js?v=16.4"></script>
-    <script src="js/cad-engine-v16-new.js?v=16.4"></script>
-    <script src="js/sketch-processor.js?v=16.4"></script>
-    <script src="js/app-v16-new.js?v=16.4"></script>
+    <script src="js/shapes-db.js?v=66.0"></script>
+    <script src="js/cad-engine-v16-new.js?v=66.0"></script>
+    <script src="js/sketch-processor.js?v=66.0"></script>
+    <script src="js/app-v16-new.js?v=87.0"></script>
     <script>
         window.addEventListener("load", () => {
             if (window.lucide) {

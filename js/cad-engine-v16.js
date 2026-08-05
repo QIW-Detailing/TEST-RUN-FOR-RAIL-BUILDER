@@ -95,19 +95,33 @@ function getPicketPositions(style, length, leftPostW, rightPostW, pickW, picketS
         }
     } else {
         // Centered fallback (no posts, or picketSpacing <= 0)
-        const clearWidth = baseLength - leftPostW - rightPostW;
-        const numPickets = picketSpacing > 0 ? Math.floor((clearWidth - pickW) / picketSpacing) : 0;
-        if (numPickets > 0) {
-            const usedWidth = (numPickets - 1) * picketSpacing + pickW;
-            const startX = leftPostW + (clearWidth - usedWidth) / 2;
-            for (let i = 0; i < numPickets; i++) {
-                picketPositions.push(startX + i * picketSpacing);
+        if (deltaLeft > 0 || deltaRight > 0) {
+            const minCenter = 4.0;
+            const maxCenter = length - 4.0;
+            if (maxCenter >= minCenter && picketSpacing > 0) {
+                const availableSpan = maxCenter - minCenter;
+                const numSpaces = Math.max(1, Math.round(availableSpan / picketSpacing));
+                const actualSpacing = availableSpan / numSpaces;
+                for (let k = 0; k <= numSpaces; k++) {
+                    const cx = minCenter + k * actualSpacing;
+                    picketPositions.push(cx - pickW / 2);
+                }
+            }
+        } else {
+            const clearWidth = baseLength - leftPostW - rightPostW;
+            const numPickets = picketSpacing > 0 ? Math.floor((clearWidth - pickW) / picketSpacing) : 0;
+            if (numPickets > 0) {
+                const usedWidth = (numPickets - 1) * picketSpacing + pickW;
+                const startX = leftPostW + (clearWidth - usedWidth) / 2;
+                for (let i = 0; i < numPickets; i++) {
+                    picketPositions.push(startX + i * picketSpacing);
+                }
             }
         }
     }
 
     // Shift pickets if left end is extended
-    if (deltaLeft > 0) {
+    if (deltaLeft > 0 && anchor !== null) {
         picketPositions = picketPositions.map(px => px + deltaLeft);
     }
 
@@ -1502,11 +1516,12 @@ if (typeof makerjs !== 'undefined' && makerjs.measure) {
         if (typeof model === 'string') return model;
         if (!this.isLibReady()) return "<text x='10' y='30' fill='#f44'>CAD Engine Unavailable</text>";
         try {
-            const defaultOpts = { useSubUnits: true, units: makerjs.unitType.Inch, stroke: '#00d4ff' };
+            const defaultOpts = { useSubUnits: true, units: makerjs.unitType.Inch, stroke: '#00d4ff', fill: 'none' };
             const mergedOpts = Object.assign({}, defaultOpts, options);
             let svg = makerjs.exporter.toSVG(model, mergedOpts);
             svg = svg.replace(/width="[^"]*"/, 'width="100%"');
             svg = svg.replace(/height="[^"]*"/, 'height="100%"');
+            svg = svg.replace(/<svg([^>]*)>/i, '<svg$1><style>path, polygon, rect, circle, line { fill: none !important; }</style>');
             return svg;
         } catch (e) {
             console.error("Error rendering SVG:", e);
@@ -2556,7 +2571,8 @@ if (typeof makerjs !== 'undefined' && makerjs.measure) {
         panelType = 'main',
         freeEnd4 = false,
         deltaLeft = 0,
-        deltaRight = 0
+        deltaRight = 0,
+        basePlateConfig = null
     ) {
         length = parseFloat(length) || 120.0;
         fenceHeight = parseFloat(fenceHeight) || 41.0;
@@ -2679,6 +2695,14 @@ if (typeof makerjs !== 'undefined' && makerjs.measure) {
             model.models.basePlates = { models: {} };
         }
 
+        const bpc = basePlateConfig || {};
+        const isWallMount = (includeBasePlates === 'yes' && bpc.connectionType === 'wall_mount');
+        const wallMountOffset = isWallMount ? (bpc.wallMountOffset !== undefined && !isNaN(parseFloat(bpc.wallMountOffset)) ? parseFloat(bpc.wallMountOffset) : 1.0) : 0;
+        const wallPlateW = (bpc.plateShape === 'qiw_standard') ? (bpc.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpc.width) || 6.0);
+        const wallPlateH = (bpc.plateShape === 'qiw_standard') ? (bpc.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpc.height) || 6.0);
+        const postYStart = 0;
+        const bpYPos = isWallMount ? wallMountOffset : -bpH;
+
         const pt = 0.2; // default HSS inner offset if type is hss_rect
         const botRailY = postHeight - fenceHeight;
 
@@ -2720,8 +2744,50 @@ if (typeof makerjs !== 'undefined' && makerjs.measure) {
             posts.push({ type: 'right', startX: isRightCorner ? length : length - postW, endX: isRightCorner ? length + postW : length, center: isRightCorner ? length + postW / 2 : length - postW / 2 });
         }
 
-        // --- DRAW POSTS ---
-        
+        const createBasePlateModel = (cx) => {
+            if (isWallMount) {
+                const plateW = wallPlateW;
+                const plateH = wallPlateH;
+                const bp = {
+                    models: { outer: new makerjs.models.Rectangle(plateW, plateH) },
+                    paths: {}
+                };
+                const holes = [
+                    { x: 1.0, y: 1.0, diameter: 0.5 },
+                    { x: plateW - 1.0, y: 1.0, diameter: 0.5 },
+                    { x: 1.0, y: plateH - 1.0, diameter: 0.5 },
+                    { x: plateW - 1.0, y: plateH - 1.0, diameter: 0.5 }
+                ];
+                holes.forEach((h, hIdx) => {
+                    const circle = new makerjs.paths.Circle([h.x, h.y], h.diameter / 2);
+                    circle.layer = 'bpHole';
+                    bp.paths['hole_' + hIdx] = circle;
+                });
+                bp.origin = [cx - plateW / 2, wallMountOffset];
+                return bp;
+            } else {
+                const leftX1 = bpHoleOffsetX - bpHoleD / 2;
+                const leftX2 = bpHoleOffsetX + bpHoleD / 2;
+                const rightX1 = bpW - bpHoleOffsetX - bpHoleD / 2;
+                const rightX2 = bpW - bpHoleOffsetX + bpHoleD / 2;
+                const bp = {
+                    models: { outer: new makerjs.models.Rectangle(bpW, bpH) },
+                    paths: {
+                        h1_left: new makerjs.paths.Line([leftX1, 0], [leftX1, bpH]),
+                        h1_right: new makerjs.paths.Line([leftX2, 0], [leftX2, bpH]),
+                        h2_left: new makerjs.paths.Line([rightX1, 0], [rightX1, bpH]),
+                        h2_right: new makerjs.paths.Line([rightX2, 0], [rightX2, bpH])
+                    }
+                };
+                bp.paths.h1_left.layer = 'bpHole';
+                bp.paths.h1_right.layer = 'bpHole';
+                bp.paths.h2_left.layer = 'bpHole';
+                bp.paths.h2_right.layer = 'bpHole';
+                bp.origin = [cx - bpW / 2, bpYPos];
+                return bp;
+            }
+        };
+
         // 1. Left Post
         if (hasLeftPost) {
             const leftPost = { models: {}, paths: {} };
@@ -2756,25 +2822,8 @@ if (typeof makerjs !== 'undefined' && makerjs.measure) {
             model.models.posts.models['leftPost'] = leftPost;
 
             if (includeBasePlates === 'yes') {
-                const leftX1 = bpHoleOffsetX - bpHoleD / 2;
-                const leftX2 = bpHoleOffsetX + bpHoleD / 2;
-                const rightX1 = bpW - bpHoleOffsetX - bpHoleD / 2;
-                const rightX2 = bpW - bpHoleOffsetX + bpHoleD / 2;
-                const bp = {
-                    models: { outer: new makerjs.models.Rectangle(bpW, bpH) },
-                    paths: {
-                        h1_left: new makerjs.paths.Line([leftX1, 0], [leftX1, bpH]),
-                        h1_right: new makerjs.paths.Line([leftX2, 0], [leftX2, bpH]),
-                        h2_left: new makerjs.paths.Line([rightX1, 0], [rightX1, bpH]),
-                        h2_right: new makerjs.paths.Line([rightX2, 0], [rightX2, bpH])
-                    }
-                };
-                bp.paths.h1_left.layer = 'bpHole';
-                bp.paths.h1_right.layer = 'bpHole';
-                bp.paths.h2_left.layer = 'bpHole';
-                bp.paths.h2_right.layer = 'bpHole';
-                bp.origin = [isLeftCorner ? -postW / 2 - bpW / 2 : postW / 2 - bpW / 2, -bpH];
-                model.models.basePlates.models['bpLeft'] = bp;
+                const leftCx = isLeftCorner ? -postW / 2 : postW / 2;
+                model.models.basePlates.models['bpLeft'] = createBasePlateModel(leftCx);
             }
         }
 
@@ -2806,25 +2855,8 @@ if (typeof makerjs !== 'undefined' && makerjs.measure) {
             model.models.posts.models['rightPost'] = rightPost;
 
             if (includeBasePlates === 'yes') {
-                const leftX1 = bpHoleOffsetX - bpHoleD / 2;
-                const leftX2 = bpHoleOffsetX + bpHoleD / 2;
-                const rightX1 = bpW - bpHoleOffsetX - bpHoleD / 2;
-                const rightX2 = bpW - bpHoleOffsetX + bpHoleD / 2;
-                const bp = {
-                    models: { outer: new makerjs.models.Rectangle(bpW, bpH) },
-                    paths: {
-                        h1_left: new makerjs.paths.Line([leftX1, 0], [leftX1, bpH]),
-                        h1_right: new makerjs.paths.Line([leftX2, 0], [leftX2, bpH]),
-                        h2_left: new makerjs.paths.Line([rightX1, 0], [rightX1, bpH]),
-                        h2_right: new makerjs.paths.Line([rightX2, 0], [rightX2, bpH])
-                    }
-                };
-                bp.paths.h1_left.layer = 'bpHole';
-                bp.paths.h1_right.layer = 'bpHole';
-                bp.paths.h2_left.layer = 'bpHole';
-                bp.paths.h2_right.layer = 'bpHole';
-                bp.origin = [isRightCorner ? length + postW / 2 - bpW / 2 : length - postW / 2 - bpW / 2, -bpH];
-                model.models.basePlates.models['bpRight'] = bp;
+                const rightCx = isRightCorner ? length + postW / 2 : length - postW / 2;
+                model.models.basePlates.models['bpRight'] = createBasePlateModel(rightCx);
             }
         }
 
@@ -2842,25 +2874,7 @@ if (typeof makerjs !== 'undefined' && makerjs.measure) {
             model.models.posts.models['midPost_' + idx] = midPost;
 
             if (includeBasePlates === 'yes') {
-                const leftX1 = bpHoleOffsetX - bpHoleD / 2;
-                const leftX2 = bpHoleOffsetX + bpHoleD / 2;
-                const rightX1 = bpW - bpHoleOffsetX - bpHoleD / 2;
-                const rightX2 = bpW - bpHoleOffsetX + bpHoleD / 2;
-                const bp = {
-                    models: { outer: new makerjs.models.Rectangle(bpW, bpH) },
-                    paths: {
-                        h1_left: new makerjs.paths.Line([leftX1, 0], [leftX1, bpH]),
-                        h1_right: new makerjs.paths.Line([leftX2, 0], [leftX2, bpH]),
-                        h2_left: new makerjs.paths.Line([rightX1, 0], [rightX1, bpH]),
-                        h2_right: new makerjs.paths.Line([rightX2, 0], [rightX2, bpH])
-                    }
-                };
-                bp.paths.h1_left.layer = 'bpHole';
-                bp.paths.h1_right.layer = 'bpHole';
-                bp.paths.h2_left.layer = 'bpHole';
-                bp.paths.h2_right.layer = 'bpHole';
-                bp.origin = [mp.center - bpW / 2, -bpH];
-                model.models.basePlates.models['bpMid_' + idx] = bp;
+                model.models.basePlates.models['bpMid_' + idx] = createBasePlateModel(mp.center);
             }
         });
 
@@ -3708,42 +3722,43 @@ if (typeof makerjs !== 'undefined' && makerjs.measure) {
             if (forceCornerLeft) leftPostVal = 'corner';
             if (forceCornerRight) rightPostVal = 'corner';
         }
-        let fHeight = panel.fenceHeight !== undefined ? panel.fenceHeight : 41.0;
-        let pHeight = panel.postHeight !== undefined ? panel.postHeight : 45.75;
-        let postType = panel.postType || 'hss_rect';
-        let postW = panel.postW !== undefined ? panel.postW : 1.5;
-        let postH = panel.postH !== undefined ? panel.postH : 1.5;
-        let postT = panel.postT !== undefined ? panel.postT : 0.1196;
+        const props = window.getResolvedPanelProperties ? window.getResolvedPanelProperties(panel, style) : null;
+        let fHeight = props ? props.fHeight : (panel.fenceHeight !== undefined ? panel.fenceHeight : 41.0);
+        let pHeight = props ? props.pHeight : (panel.postHeight !== undefined ? panel.postHeight : 45.75);
+        let postType = props ? props.postType : (panel.postType || 'hss_rect');
+        let postW = props ? props.postW : (panel.postW !== undefined ? panel.postW : 1.5);
+        let postH = props ? props.postH : (panel.postH !== undefined ? panel.postH : 1.5);
+        let postT = props ? props.postT : (panel.postT !== undefined ? panel.postT : 0.1196);
         
-        let topRailType = panel.topRailType || 'hss_rect';
-        let topRailW = panel.topRailW !== undefined ? panel.topRailW : 1.5;
-        let topRailH = panel.topRailH !== undefined ? panel.topRailH : 1.5;
-        let topRailT = panel.topRailT !== undefined ? panel.topRailT : 0.0598;
+        let topRailType = props ? props.topRailType : (panel.topRailType || 'hss_rect');
+        let topRailW = props ? props.topRailW : (panel.topRailW !== undefined ? panel.topRailW : 1.5);
+        let topRailH = props ? props.topRailH : (panel.topRailH !== undefined ? panel.topRailH : 1.5);
+        let topRailT = props ? props.topRailT : (panel.topRailT !== undefined ? panel.topRailT : 0.0598);
         
-        let botRailType = panel.botRailType || 'hss_rect';
-        let botRailW = panel.botRailW !== undefined ? panel.botRailW : 1.5;
-        let botRailH = panel.botRailH !== undefined ? panel.botRailH : 1.5;
-        let botRailT = panel.botRailT !== undefined ? panel.botRailT : 0.0598;
+        let botRailType = props ? props.botRailType : (panel.botRailType || 'hss_rect');
+        let botRailW = props ? props.botRailW : (panel.botRailW !== undefined ? panel.botRailW : 1.5);
+        let botRailH = props ? props.botRailH : (panel.botRailH !== undefined ? panel.botRailH : 1.5);
+        let botRailT = props ? props.botRailT : (panel.botRailT !== undefined ? panel.botRailT : 0.0598);
         
-        let midRailType = panel.midRailType || 'none';
-        let midRailW = panel.midRailW !== undefined ? panel.midRailW : 1.5;
-        let midRailH = panel.midRailH !== undefined ? panel.midRailH : 1.5;
-        let midRailT = panel.midRailT !== undefined ? panel.midRailT : 0.0598;
-        let midRailGap = panel.midRailGap !== undefined ? panel.midRailGap : 12.0;
+        let midRailType = props ? props.midRailType : (panel.midRailType || 'none');
+        let midRailW = props ? props.midRailW : (panel.midRailW !== undefined ? panel.midRailW : 1.5);
+        let midRailH = props ? props.midRailH : (panel.midRailH !== undefined ? panel.midRailH : 1.5);
+        let midRailT = props ? props.midRailT : (panel.midRailT !== undefined ? panel.midRailT : 0.0598);
+        let midRailGap = props ? props.midRailGap : (panel.midRailGap !== undefined ? panel.midRailGap : 12.0);
         
-        let picketType = panel.picketType || 'hss_rect';
-        let picketW = panel.picketW !== undefined ? panel.picketW : 0.5;
-        let picketH = panel.picketH !== undefined ? panel.picketH : 0.5;
-        let picketT = panel.picketT !== undefined ? panel.picketT : 0.0598;
-        let picketSpacing = panel.picketSpacing !== undefined ? panel.picketSpacing : 4.0;
+        let picketType = props ? props.picketType : (panel.picketType || 'hss_rect');
+        let picketW = props ? props.picketW : (panel.picketW !== undefined ? panel.picketW : 0.5);
+        let picketH = props ? props.picketH : (panel.picketH !== undefined ? panel.picketH : 0.5);
+        let picketT = props ? props.picketT : (panel.picketT !== undefined ? panel.picketT : 0.0598);
+        let picketSpacing = props ? props.picketSpacing : (panel.picketSpacing !== undefined ? panel.picketSpacing : 4.0);
         
-        let includeBasePlates = panel.includeBasePlates || 'no';
-        let bpW = panel.basePlateW !== undefined ? panel.basePlateW : 6.0;
-        let bpL = panel.basePlateL !== undefined ? panel.basePlateL : 6.0;
-        let bpH = panel.basePlateT !== undefined ? panel.basePlateT : 0.5;
-        let bpHoleD = panel.basePlateHoleD !== undefined ? panel.basePlateHoleD : 0.5;
-        let bpHoleOffsetX = panel.basePlateHoleOffsetX !== undefined ? panel.basePlateHoleOffsetX : 0.5;
-        let bpHoleOffsetY = panel.basePlateHoleOffsetY !== undefined ? panel.basePlateHoleOffsetY : 0.25;
+        let includeBasePlates = props ? props.includeBasePlates : (panel.includeBasePlates || 'no');
+        let bpW = props ? props.bpW : (panel.basePlateW !== undefined ? panel.basePlateW : 6.0);
+        let bpL = props ? props.bpL : (panel.basePlateL !== undefined ? panel.basePlateL : 6.0);
+        let bpH = props ? props.bpH : (panel.basePlateT !== undefined ? panel.basePlateT : 0.5);
+        let bpHoleD = props ? props.bpHoleD : (panel.basePlateHoleD !== undefined ? panel.basePlateHoleD : 0.5);
+        let bpHoleOffsetX = props ? props.bpHoleOffsetX : (panel.basePlateHoleOffsetX !== undefined ? panel.basePlateHoleOffsetX : 0.5);
+        let bpHoleOffsetY = props ? props.bpHoleOffsetY : (panel.basePlateHoleOffsetY !== undefined ? panel.basePlateHoleOffsetY : 0.25);
 
         if (panel.basePlateConfig) {
             const bpc = panel.basePlateConfig;
@@ -3938,7 +3953,8 @@ if (typeof makerjs !== 'undefined' && makerjs.measure) {
             panelType,
             panel.freeEnd4 || false,
             deltaLeft,
-            deltaRight
+            deltaRight,
+            panel.basePlateConfig
         );
     },
 
@@ -4444,7 +4460,7 @@ if (typeof makerjs !== 'undefined' && makerjs.measure) {
         return combined;
     },
 
-    createLoosePostModel: function(postW, postHeight, topRailH, postType, postT, includeBasePlates, bpW, bpL, bpH, bpHoleD, bpHoleOffsetX, bpHoleOffsetY, style, fenceHeight, botRailH, midRailType, midRailGap, midRailH) {
+    createLoosePostModel: function(postW, postHeight, topRailH, postType, postT, includeBasePlates, bpW, bpL, bpH, bpHoleD, bpHoleOffsetX, bpHoleOffsetY, style, fenceHeight, botRailH, midRailType, midRailGap, midRailH, side = 'left', extraLen = 0, offsetX = 0, offsetY = 0, basePlateConfig = null) {
         const model = {
             models: {
                 posts: { models: {} }
@@ -4454,9 +4470,15 @@ if (typeof makerjs !== 'undefined' && makerjs.measure) {
             model.models.basePlates = { models: {} };
         }
         
+        const addLen = parseFloat(extraLen) || 0;
+        const offX = parseFloat(offsetX) || 0;
+        const offY = parseFloat(offsetY) || 0;
+
+        const effectivePostHeight = postHeight + addLen;
+        
         const singlePost = { models: {}, paths: {} };
-        singlePost.models.outer = new makerjs.models.Rectangle(postW, postHeight);
-        singlePost.origin = [0, 0];
+        singlePost.models.outer = new makerjs.models.Rectangle(postW, effectivePostHeight);
+        singlePost.origin = [offX - postW / 2, 0];
         model.models.posts.models['loosePost'] = singlePost;
 
         const isMeshStyle = (style === 'urban_balcony' || style === 'villa_balcony' || style === 'urban_custom' || style === 'villa_custom');
@@ -4481,31 +4503,61 @@ if (typeof makerjs !== 'undefined' && makerjs.measure) {
                         outer: new makerjs.models.Rectangle(fbW, actualFbHeight)
                     }
                 };
-                fb.origin = [postW, yStart + 1.0];
+                const fbX = (side === 'right' || side === 'looseRightPost') ? (offX - postW / 2 - fbW) : (offX + postW / 2);
+                fb.origin = [fbX, yStart + 1.0];
                 model.models.posts.models['flatBarAttachment'] = fb;
             }
         }
 
         if (includeBasePlates === 'yes') {
-            const leftX1 = bpHoleOffsetX - bpHoleD / 2;
-            const leftX2 = bpHoleOffsetX + bpHoleD / 2;
-            const rightX1 = bpW - bpHoleOffsetX - bpHoleD / 2;
-            const rightX2 = bpW - bpHoleOffsetX + bpHoleD / 2;
-            const bp = {
-                models: { outer: new makerjs.models.Rectangle(bpW, bpH) },
-                paths: {
-                    h1_left: new makerjs.paths.Line([leftX1, 0], [leftX1, bpH]),
-                    h1_right: new makerjs.paths.Line([leftX2, 0], [leftX2, bpH]),
-                    h2_left: new makerjs.paths.Line([rightX1, 0], [rightX1, bpH]),
-                    h2_right: new makerjs.paths.Line([rightX2, 0], [rightX2, bpH])
-                }
-            };
-            bp.paths.h1_left.layer = 'bpHole';
-            bp.paths.h1_right.layer = 'bpHole';
-            bp.paths.h2_left.layer = 'bpHole';
-            bp.paths.h2_right.layer = 'bpHole';
-            bp.origin = [postW / 2 - bpW / 2, -bpH];
-            model.models.basePlates.models['bpLoose'] = bp;
+            const bpc = basePlateConfig || {};
+            const isWallMount = (bpc.connectionType === 'wall_mount');
+            if (isWallMount) {
+                const wallMountOffset = (bpc.wallMountOffset !== undefined && !isNaN(parseFloat(bpc.wallMountOffset))) ? parseFloat(bpc.wallMountOffset) : 1.0;
+                const plateW = (bpc.plateShape === 'qiw_standard') ? (bpc.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpc.width) || 6.0);
+                const plateH = (bpc.plateShape === 'qiw_standard') ? (bpc.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpc.height) || 6.0);
+                const holeMargin = (bpc.plateShape === 'qiw_standard') ? 0.75 : (parseFloat(bpc.corners ? bpc.corners.margin : 1.0) || 1.0);
+                const holeD = parseFloat(bpc.corners ? bpc.corners.diameter : 0.5) || 0.5;
+
+                const bp = {
+                    models: { outer: new makerjs.models.Rectangle(plateW, plateH) },
+                    paths: {}
+                };
+                const holes = [
+                    { x: holeMargin, y: holeMargin },
+                    { x: plateW - holeMargin, y: holeMargin },
+                    { x: holeMargin, y: plateH - holeMargin },
+                    { x: plateW - holeMargin, y: plateH - holeMargin }
+                ];
+                holes.forEach((h, hIdx) => {
+                    const circle = new makerjs.paths.Circle([h.x, h.y], holeD / 2);
+                    circle.layer = 'bpHole';
+                    bp.paths['hole_' + hIdx] = circle;
+                });
+                const postCx = offX + postW / 2;
+                bp.origin = [postCx - plateW / 2, wallMountOffset];
+                model.models.basePlates.models['bpLoose'] = bp;
+            } else {
+                const leftX1 = bpHoleOffsetX - bpHoleD / 2;
+                const leftX2 = bpHoleOffsetX + bpHoleD / 2;
+                const rightX1 = bpW - bpHoleOffsetX - bpHoleD / 2;
+                const rightX2 = bpW - bpHoleOffsetX + bpHoleD / 2;
+                const bp = {
+                    models: { outer: new makerjs.models.Rectangle(bpW, bpH) },
+                    paths: {
+                        h1_left: new makerjs.paths.Line([leftX1, 0], [leftX1, bpH]),
+                        h1_right: new makerjs.paths.Line([leftX2, 0], [leftX2, bpH]),
+                        h2_left: new makerjs.paths.Line([rightX1, 0], [rightX1, bpH]),
+                        h2_right: new makerjs.paths.Line([rightX2, 0], [rightX2, bpH])
+                    }
+                };
+                bp.paths.h1_left.layer = 'bpHole';
+                bp.paths.h1_right.layer = 'bpHole';
+                bp.paths.h2_left.layer = 'bpHole';
+                bp.paths.h2_right.layer = 'bpHole';
+                bp.origin = [-bpW / 2, -bpH];
+                model.models.basePlates.models['bpLoose'] = bp;
+            }
         }
         return model;
     }

@@ -265,39 +265,168 @@ function formatPlateDesc(sizeId, width) {
     };
 }
 
+function parseDimensionInput(val) {
+    if (val === null || val === undefined) return 0;
+    if (typeof val === 'number') return isNaN(val) ? 0 : val;
+    let s = String(val).trim();
+    if (!s) return 0;
+
+    if (s.includes("'")) {
+        const parts = s.split("'");
+        const ft = parseFloat(parts[0]) || 0;
+        let inchStr = parts[1] ? parts[1].replace(/^-/, '').replace(/"/g, '').trim() : '';
+        let inches = 0;
+        if (inchStr) {
+            inches = parseDimensionInput(inchStr);
+        }
+        return (ft * 12) + (ft < 0 ? -inches : inches);
+    }
+
+    s = s.replace(/"/g, '').trim();
+
+    if (s.includes(' ')) {
+        const spaceParts = s.split(/\s+/);
+        if (spaceParts.length >= 2) {
+            const whole = parseFloat(spaceParts[0]) || 0;
+            const fracStr = spaceParts[1];
+            if (fracStr.includes('/')) {
+                const fracParts = fracStr.split('/');
+                const num = parseFloat(fracParts[0]) || 0;
+                const den = parseFloat(fracParts[1]) || 1;
+                const frac = den !== 0 ? num / den : 0;
+                return whole >= 0 ? whole + frac : whole - frac;
+            }
+        }
+    }
+
+    if (s.includes('/')) {
+        const fracParts = s.split('/');
+        const num = parseFloat(fracParts[0]) || 0;
+        const den = parseFloat(fracParts[1]) || 1;
+        return den !== 0 ? num / den : 0;
+    }
+
+    return parseFloat(s) || 0;
+}
+window.parseDimensionInput = parseDimensionInput;
+
+function calculateScenarioADefaultQty(mainPanel, activeSet, currentType, isMeshStyle) {
+    const set = activeSet || (typeof balconyWizardState !== 'undefined' ? (balconyWizardState.tempSet || balconyWizardState.sets?.[balconyWizardState.activeSetIdx]) : null);
+    if (!set) return 1;
+    const main = set.main || mainPanel || {};
+    let count = 0;
+
+    if (isMeshStyle) {
+        if (currentType === 'looseRightPost') {
+            if (set.rightReturn) {
+                if (set.rightReturn.rightPost === 'none' || set.rightReturn.rightPost === 'no') count++;
+                if ((main.rightPost === 'none' || main.rightPost === 'no') && 
+                    (set.rightReturn.leftPost === 'none' || set.rightReturn.leftPost === 'no')) count++;
+            } else {
+                if (main.rightPost === 'none' || main.rightPost === 'no') count++;
+            }
+            return count > 0 ? count : 1;
+        } else {
+            if (set.leftReturn) {
+                if (set.leftReturn.leftPost === 'none' || set.leftReturn.leftPost === 'no') count++;
+                if ((main.leftPost === 'none' || main.leftPost === 'no') && 
+                    (set.leftReturn.rightPost === 'none' || set.leftReturn.rightPost === 'no')) count++;
+            } else {
+                if (main.leftPost === 'none' || main.leftPost === 'no') count++;
+            }
+            return count > 0 ? count : 1;
+        }
+    } else {
+        if (set.leftReturn) {
+            if (set.leftReturn.leftPost === 'none' || set.leftReturn.leftPost === 'no') count++;
+            if ((main.leftPost === 'none' || main.leftPost === 'no') && 
+                (set.leftReturn.rightPost === 'none' || set.leftReturn.rightPost === 'no')) count++;
+        } else {
+            if (main.leftPost === 'none' || main.leftPost === 'no') count++;
+        }
+
+        if (set.rightReturn) {
+            if (set.rightReturn.rightPost === 'none' || set.rightReturn.rightPost === 'no') count++;
+            if ((main.rightPost === 'none' || main.rightPost === 'no') && 
+                (set.rightReturn.leftPost === 'none' || set.rightReturn.leftPost === 'no')) count++;
+        } else {
+            if (main.rightPost === 'none' || main.rightPost === 'no') count++;
+        }
+        return count > 0 ? count : 2;
+    }
+}
+
+function getLoosePostOffsetX(valsObj, panelType) {
+    const pType = panelType || (typeof balconyWizardState !== 'undefined' ? balconyWizardState.activePanelType : 'loosePost') || 'loosePost';
+    if (valsObj) {
+        if (valsObj[pType + '_offsetX'] !== undefined && !isNaN(parseFloat(valsObj[pType + '_offsetX']))) {
+            return parseFloat(valsObj[pType + '_offsetX']);
+        }
+        if (valsObj.looseOffsetX !== undefined && !isNaN(parseFloat(valsObj.looseOffsetX))) {
+            return parseFloat(valsObj.looseOffsetX);
+        }
+    }
+    const inp = document.getElementById('inp-loose-post-offset-x');
+    if (inp && !isNaN(parseFloat(inp.value))) {
+        return parseFloat(inp.value);
+    }
+    return 0;
+}
+
+function getLoosePostOffsetY(valsObj, panelType) {
+    const pType = panelType || (typeof balconyWizardState !== 'undefined' ? balconyWizardState.activePanelType : 'loosePost') || 'loosePost';
+    if (valsObj) {
+        if (valsObj[pType + '_offsetY'] !== undefined && !isNaN(parseFloat(valsObj[pType + '_offsetY']))) {
+            return parseFloat(valsObj[pType + '_offsetY']);
+        }
+        if (valsObj.looseOffsetY !== undefined && !isNaN(parseFloat(valsObj.looseOffsetY))) {
+            return parseFloat(valsObj.looseOffsetY);
+        }
+    }
+    const inp = document.getElementById('inp-loose-post-offset-y');
+    if (inp && !isNaN(parseFloat(inp.value))) {
+        return parseFloat(inp.value);
+    }
+    return 0;
+}
+
 function getResolvedPanelProperties(panel, style) {
     if (!panel) return null;
-    let fHeight = panel.fenceHeight !== undefined ? panel.fenceHeight : 41.0;
-    let pHeight = panel.postHeight !== undefined ? panel.postHeight : 45.75;
-    let postType = panel.postType || 'hss_rect';
-    let postW = panel.postW !== undefined ? panel.postW : 1.5;
-    let postH = panel.postH !== undefined ? panel.postH : 1.5;
-    let postT = panel.postT !== undefined ? panel.postT : 0.1196;
-    let topRailType = panel.topRailType || 'hss_rect';
-    let topRailW = panel.topRailW !== undefined ? panel.topRailW : 1.5;
-    let topRailH = panel.topRailH !== undefined ? panel.topRailH : 1.5;
-    let topRailT = panel.topRailT !== undefined ? panel.topRailT : 0.0598;
-    let botRailType = panel.botRailType || 'hss_rect';
-    let botRailW = panel.botRailW !== undefined ? panel.botRailW : 1.5;
-    let botRailH = panel.botRailH !== undefined ? panel.botRailH : 1.5;
-    let botRailT = panel.botRailT !== undefined ? panel.botRailT : 0.0598;
-    let midRailType = panel.midRailType || 'none';
-    let midRailW = panel.midRailW !== undefined ? panel.midRailW : 1.5;
-    let midRailH = panel.midRailH !== undefined ? panel.midRailH : 1.5;
-    let midRailT = panel.midRailT !== undefined ? panel.midRailT : 0.0598;
-    let midRailGap = panel.midRailGap !== undefined ? panel.midRailGap : 12.0;
-    let picketType = panel.picketType || 'hss_rect';
-    let picketW = panel.picketW !== undefined ? panel.picketW : 0.5;
-    let picketH = panel.picketH !== undefined ? panel.picketH : 0.5;
-    let picketT = panel.picketT !== undefined ? panel.picketT : 0.0598;
-    let picketSpacing = panel.picketSpacing !== undefined ? panel.picketSpacing : 4.0;
-    let includeBasePlates = panel.includeBasePlates || 'no';
-    let bpW = panel.basePlateW !== undefined ? panel.basePlateW : 6.0;
-    let bpL = panel.basePlateL !== undefined ? panel.basePlateL : 6.0;
-    let bpH = panel.basePlateT !== undefined ? panel.basePlateT : 0.5;
-    let bpHoleD = panel.basePlateHoleD !== undefined ? panel.basePlateHoleD : 0.5;
-    let bpHoleOffsetX = panel.basePlateHoleOffsetX !== undefined ? panel.basePlateHoleOffsetX : 0.5;
-    let bpHoleOffsetY = panel.basePlateHoleOffsetY !== undefined ? panel.basePlateHoleOffsetY : 0.25;
+    const wizardState = (typeof balconyWizardState !== 'undefined' && balconyWizardState) ? balconyWizardState : (window.balconyWizardState || null);
+    const activeSet = wizardState ? (wizardState.tempSet || (wizardState.sets ? wizardState.sets[wizardState.activeSetIdx] : null)) : null;
+    const main = (activeSet && activeSet.main && activeSet.main !== panel) ? activeSet.main : null;
+
+    let fHeight = panel.fenceHeight !== undefined ? panel.fenceHeight : (main && main.fenceHeight !== undefined ? main.fenceHeight : 41.0);
+    let pHeight = panel.postHeight !== undefined ? panel.postHeight : (main && main.postHeight !== undefined ? main.postHeight : 45.75);
+    let postType = panel.postType || (main ? main.postType : 'hss_rect');
+    let postW = panel.postW !== undefined ? panel.postW : (main && main.postW !== undefined ? main.postW : 1.5);
+    let postH = panel.postH !== undefined ? panel.postH : (main && main.postH !== undefined ? main.postH : 1.5);
+    let postT = panel.postT !== undefined ? panel.postT : (main && main.postT !== undefined ? main.postT : 0.1196);
+    let topRailType = panel.topRailType || (main ? main.topRailType : 'hss_rect');
+    let topRailW = panel.topRailW !== undefined ? panel.topRailW : (main && main.topRailW !== undefined ? main.topRailW : 1.5);
+    let topRailH = panel.topRailH !== undefined ? panel.topRailH : (main && main.topRailH !== undefined ? main.topRailH : 1.5);
+    let topRailT = panel.topRailT !== undefined ? panel.topRailT : (main && main.topRailT !== undefined ? main.topRailT : 0.0598);
+    let botRailType = panel.botRailType || (main ? main.botRailType : 'hss_rect');
+    let botRailW = panel.botRailW !== undefined ? panel.botRailW : (main && main.botRailW !== undefined ? main.botRailW : 1.5);
+    let botRailH = panel.botRailH !== undefined ? panel.botRailH : (main && main.botRailH !== undefined ? main.botRailH : 1.5);
+    let botRailT = panel.botRailT !== undefined ? panel.botRailT : (main && main.botRailT !== undefined ? main.botRailT : 0.0598);
+    let midRailType = panel.midRailType || (main ? main.midRailType : 'none');
+    let midRailW = panel.midRailW !== undefined ? panel.midRailW : (main && main.midRailW !== undefined ? main.midRailW : 1.5);
+    let midRailH = panel.midRailH !== undefined ? panel.midRailH : (main && main.midRailH !== undefined ? main.midRailH : 1.5);
+    let midRailT = panel.midRailT !== undefined ? panel.midRailT : (main && main.midRailT !== undefined ? main.midRailT : 0.0598);
+    let midRailGap = panel.midRailGap !== undefined ? panel.midRailGap : (main && main.midRailGap !== undefined ? main.midRailGap : 12.0);
+    let picketType = panel.picketType || (main ? main.picketType : 'hss_rect');
+    let picketW = panel.picketW !== undefined ? panel.picketW : (main && main.picketW !== undefined ? main.picketW : 0.5);
+    let picketH = panel.picketH !== undefined ? panel.picketH : (main && main.picketH !== undefined ? main.picketH : 0.5);
+    let picketT = panel.picketT !== undefined ? panel.picketT : (main && main.picketT !== undefined ? main.picketT : 0.0598);
+    let picketSpacing = panel.picketSpacing !== undefined ? panel.picketSpacing : (main && main.picketSpacing !== undefined ? main.picketSpacing : 4.0);
+    let includeBasePlates = panel.includeBasePlates || (main ? main.includeBasePlates : 'no');
+    let bpW = panel.basePlateW !== undefined ? panel.basePlateW : (main && main.basePlateW !== undefined ? main.basePlateW : 6.0);
+    let bpL = panel.basePlateL !== undefined ? panel.basePlateL : (main && main.basePlateL !== undefined ? main.basePlateL : 6.0);
+    let bpH = panel.basePlateT !== undefined ? panel.basePlateT : (main && main.basePlateT !== undefined ? main.basePlateT : 0.5);
+    let bpHoleD = panel.basePlateHoleD !== undefined ? panel.basePlateHoleD : (main && main.basePlateHoleD !== undefined ? main.basePlateHoleD : 0.5);
+    let bpHoleOffsetX = panel.basePlateHoleOffsetX !== undefined ? panel.basePlateHoleOffsetX : (main && main.basePlateHoleOffsetX !== undefined ? main.basePlateHoleOffsetX : 0.5);
+    let bpHoleOffsetY = panel.basePlateHoleOffsetY !== undefined ? panel.basePlateHoleOffsetY : (main && main.basePlateHoleOffsetY !== undefined ? main.basePlateHoleOffsetY : 0.25);
 
     if (style === 'classical') {
         fHeight = 41.0; pHeight = 45.75;
@@ -501,6 +630,120 @@ function formatPlateDesc(sizeId, width) {
     return `${formatFracLocal(width)}" x ${thick} PL`;
 }
 
+function consolidateBOMItems(items) {
+    if (!Array.isArray(items) || items.length === 0) return [];
+    
+    const consolidatedMap = new Map();
+
+    const remarkShortcuts = {
+        'BOTTOM RUNNER': 'BOT RUNNER',
+        'MID RUNNER': 'MID RUNNER',
+        'TOP RUNNER': 'TOP RUNNER',
+        'LEFT POST': 'L POST',
+        'RIGHT POST': 'R POST',
+        'L/R POST': 'L/R POST',
+        'MID POST': 'MID POST',
+        'LOOSE POST': 'LOOSE POST',
+        'BASE PLATE': 'BASE PLATE',
+        'ATTACHED FB': 'ATTACHED FB',
+        'MESH FRAME HORIZ': 'MESH FRM HORIZ',
+        'MESH FRAME VERT': 'MESH FRM VERT',
+        'WWM WIRE MESH': 'WWM MESH',
+        'PICKET': 'PICKET'
+    };
+
+    const getShortRemark = (rem) => {
+        if (!rem) return '';
+        const trimmed = rem.trim().toUpperCase();
+        return remarkShortcuts[trimmed] || trimmed;
+    };
+
+    const normalizeDesc = (desc) => {
+        if (!desc) return '';
+        return desc.toString()
+            .replace(/HSS\s*([0-9])/gi, 'HSS $1')
+            .replace(/\s+/g, ' ')
+            .trim();
+    };
+
+    items.forEach(item => {
+        let cleanMark = (item.mark || '').toString().trim();
+        const lenKey = (item.len || '').toString().trim();
+        const normalizedItemDesc = normalizeDesc(item.desc);
+        const isTop = (item.remark || '').toUpperCase().includes('TOP');
+        
+        // Group strictly by (Normalized Profile Description + Length) EXCEPT Top Runner (Main Mark)
+        const key = isTop ? `TOP_RUNNER_${cleanMark}_${lenKey}` : `${normalizedItemDesc}||${lenKey}`;
+        
+        const numericQty = typeof item.qty === 'number' ? item.qty : (parseInt(item.qty) || 1);
+        const numericWeight = typeof item.weight === 'number' ? item.weight : (parseFloat(item.weight) || 0);
+
+        if (!consolidatedMap.has(key)) {
+            const copyItem = Object.assign({}, item);
+            copyItem.mark = cleanMark;
+            copyItem.desc = normalizedItemDesc;
+            copyItem.qty = numericQty;
+            copyItem.weight = numericWeight;
+            copyItem.remarksList = [getShortRemark(item.remark)];
+            consolidatedMap.set(key, copyItem);
+        } else {
+            const existing = consolidatedMap.get(key);
+            existing.qty += numericQty;
+            existing.weight += numericWeight;
+            if (normalizedItemDesc.length > (existing.desc || '').length) {
+                existing.desc = normalizedItemDesc;
+            }
+            
+            const shortRem = getShortRemark(item.remark);
+            if (shortRem && !existing.remarksList.includes(shortRem)) {
+                existing.remarksList.push(shortRem);
+            }
+        }
+    });
+
+    let charCode = 97; // 'a'
+    const result = [];
+    consolidatedMap.forEach(item => {
+        const isTop = (item.remark || '').toUpperCase().includes('TOP');
+        const isBasePlate = (item.remark || '').toUpperCase().includes('BASE PLATE') || (item.mark && item.mark.toLowerCase().startsWith('bp'));
+        const isLoosePost = (item.remark || '').toUpperCase().includes('LOOSE POST') || (item.mark && (item.mark.toUpperCase().includes('LP') || item.mark.toUpperCase().includes('RP')));
+        const isLoosePostAttachedFb = (item.remark || '').toUpperCase().includes('ATTACHED FB') || (item.mark && (item.mark.toLowerCase().endsWith('ll') || item.mark.toLowerCase().endsWith('rr') || item.mark.toLowerCase().endsWith('rl')));
+        if (!isTop && !isBasePlate && !isLoosePost && !isLoosePostAttachedFb) {
+            const dwgMatch = item.mark && item.mark.match(/\d+\.\d+$/);
+            const dwgSuffix = dwgMatch ? dwgMatch[0] : '';
+            item.mark = String.fromCharCode(charCode) + dwgSuffix;
+            charCode++;
+        }
+
+        if (item.remarksList && item.remarksList.length > 0) {
+            const filtered = item.remarksList.filter(r => r.length > 0);
+            if (filtered.length > 1) {
+                const hasRunner = filtered.every(r => r.includes('RUNNER'));
+                const hasPost = filtered.every(r => r.includes('POST'));
+                
+                if (hasRunner) {
+                    const prefixes = filtered.map(r => r.replace(/\s+RUNNER$/i, ''));
+                    item.remark = prefixes.join(' / ') + ' RUNNER';
+                } else if (hasPost) {
+                    const prefixes = filtered.map(r => r.replace(/\s+POST$/i, ''));
+                    item.remark = prefixes.join(' / ') + ' POST';
+                } else {
+                    item.remark = filtered.join(' / ');
+                }
+            } else if (filtered.length === 1) {
+                item.remark = filtered[0];
+            }
+        }
+        delete item.remarksList;
+        if (typeof item.weight === 'number') {
+            item.weight = Math.round(item.weight * 10) / 10;
+        }
+        result.push(item);
+    });
+
+    return result;
+}
+
 function resolveFreeEndExtensions(vals, style, panelType) {
     let deltaLeft = 0;
     let deltaRight = 0;
@@ -641,19 +884,33 @@ function getPicketPositions(style, length, leftPostW, rightPostW, pickW, picketS
         }
     } else {
         // Centered fallback (no posts, or picketSpacing <= 0)
-        const clearWidth = baseLength - leftPostW - rightPostW;
-        const numPickets = picketSpacing > 0 ? Math.floor((clearWidth - pickW) / picketSpacing) : 0;
-        if (numPickets > 0) {
-            const usedWidth = (numPickets - 1) * picketSpacing + pickW;
-            const startX = leftPostW + (clearWidth - usedWidth) / 2;
-            for (let i = 0; i < numPickets; i++) {
-                picketPositions.push(startX + i * picketSpacing);
+        if (deltaLeft > 0 || deltaRight > 0) {
+            const minCenter = 4.0;
+            const maxCenter = length - 4.0;
+            if (maxCenter >= minCenter && picketSpacing > 0) {
+                const availableSpan = maxCenter - minCenter;
+                const numSpaces = Math.max(1, Math.round(availableSpan / picketSpacing));
+                const actualSpacing = availableSpan / numSpaces;
+                for (let k = 0; k <= numSpaces; k++) {
+                    const cx = minCenter + k * actualSpacing;
+                    picketPositions.push(cx - pickW / 2);
+                }
+            }
+        } else {
+            const clearWidth = baseLength - leftPostW - rightPostW;
+            const numPickets = picketSpacing > 0 ? Math.floor((clearWidth - pickW) / picketSpacing) : 0;
+            if (numPickets > 0) {
+                const usedWidth = (numPickets - 1) * picketSpacing + pickW;
+                const startX = leftPostW + (clearWidth - usedWidth) / 2;
+                for (let i = 0; i < numPickets; i++) {
+                    picketPositions.push(startX + i * picketSpacing);
+                }
             }
         }
     }
 
     // Shift pickets if left end is extended
-    if (deltaLeft > 0) {
+    if (deltaLeft > 0 && anchor !== null) {
         picketPositions = picketPositions.map(px => px + deltaLeft);
     }
 
@@ -762,7 +1019,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function resolveRailMarksAndSpans(vals, drawingNo, cat, style, postW, singleLen = null) {
-        const cleanDrawingNo = drawingNo.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const sheetNum = (drawingNo || '1').toString().toUpperCase().replace(/[^A-Z0-9.]/g, '');
         
         // Calculate spans
         const clearSpans = [];
@@ -873,45 +1130,30 @@ document.addEventListener('DOMContentLoaded', () => {
             return false;
         })();
 
-        if (areDescSame) {
-            const sharedUniqueLengths = [];
-            bottomSegments.forEach(seg => {
-                if (!sharedUniqueLengths.includes(seg.len)) {
-                    sharedUniqueLengths.push(seg.len);
-                }
-                const uIdx = sharedUniqueLengths.indexOf(seg.len);
-                const suffix = uIdx === 0 ? "" : String.fromCharCode(64 + uIdx);
-                seg.mark = "a" + (cat === 'rail_catalog' ? drawingNo : cleanDrawingNo) + suffix;
-            });
-            midSegments.forEach(seg => {
-                if (!sharedUniqueLengths.includes(seg.len)) {
-                    sharedUniqueLengths.push(seg.len);
-                }
-                const uIdx = sharedUniqueLengths.indexOf(seg.len);
-                const suffix = uIdx === 0 ? "" : String.fromCharCode(64 + uIdx);
-                seg.mark = "a" + (cat === 'rail_catalog' ? drawingNo : cleanDrawingNo) + suffix;
-            });
-        } else {
-            const bottomUniqueLengths = [];
-            bottomSegments.forEach(seg => {
-                if (!bottomUniqueLengths.includes(seg.len)) {
-                    bottomUniqueLengths.push(seg.len);
-                }
-                const uIdx = bottomUniqueLengths.indexOf(seg.len);
-                const suffix = uIdx === 0 ? "" : String.fromCharCode(64 + uIdx); // 65 is 'A'
-                seg.mark = "a" + (cat === 'rail_catalog' ? drawingNo : cleanDrawingNo) + suffix;
-            });
+        let charCode = 97; // 'a'
+        const getNextMark = () => {
+            const letter = String.fromCharCode(charCode);
+            charCode++;
+            return letter + sheetNum;
+        };
 
-            const midUniqueLengths = [];
-            midSegments.forEach(seg => {
-                if (!midUniqueLengths.includes(seg.len)) {
-                    midUniqueLengths.push(seg.len);
-                }
-                const uIdx = midUniqueLengths.indexOf(seg.len);
-                const suffix = uIdx === 0 ? "" : String.fromCharCode(64 + uIdx); // 65 is 'A'
-                seg.mark = "b" + (cat === 'rail_catalog' ? drawingNo : cleanDrawingNo) + suffix;
-            });
-        }
+        const bottomUniqueLengths = {};
+        bottomSegments.forEach(seg => {
+            if (!bottomUniqueLengths[seg.len]) {
+                bottomUniqueLengths[seg.len] = getNextMark();
+            }
+            seg.mark = bottomUniqueLengths[seg.len];
+        });
+
+        const midUniqueLengths = {};
+        midSegments.forEach(seg => {
+            if (areDescSame && bottomUniqueLengths[seg.len]) {
+                midUniqueLengths[seg.len] = bottomUniqueLengths[seg.len];
+            } else if (!midUniqueLengths[seg.len]) {
+                midUniqueLengths[seg.len] = getNextMark();
+            }
+            seg.mark = midUniqueLengths[seg.len];
+        });
         return {
             bottomSegments,
             midSegments
@@ -920,8 +1162,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function getDefaultBasePlateConfig() {
         return {
-            plateShape: 'rect',
-            qiwPlateType: 'QBP43',
+            connectionType: 'bottom',
+            wallMountOffset: 1.0,
+            plateShape: 'qiw_standard',
+            qiwPlateType: 'QBP54',
             width: 6.0,
             height: 6.0,
             thickness: 0.5,
@@ -957,7 +1201,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function getDefaultPanelConfig() {
         return {
-            railStyle: 'classical',
+            railStyle: 'executive',
             length: 144,
             leftPost: 'none',
             rightPost: 'none',
@@ -1005,7 +1249,8 @@ document.addEventListener('DOMContentLoaded', () => {
             extraFlatBar: 'no',
             customScaleOverride: 'auto',
             customOffsetX: 0,
-            customOffsetY: 0
+            customOffsetY: 0,
+            extra6: true
         };
     }
 
@@ -1087,6 +1332,12 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (panelType === 'loosePost') {
             drawingNo = baseDwg + ".1";
             mainMark = baseDwg + "P1";
+        } else if (panelType === 'looseLeftPost') {
+            drawingNo = baseDwg + ".1L";
+            mainMark = baseDwg + "LP";
+        } else if (panelType === 'looseRightPost') {
+            drawingNo = baseDwg + ".1R";
+            mainMark = baseDwg + "RP";
         }
         return { drawingNo, mainMark };
     }
@@ -1160,6 +1411,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setVal('midRailType', 'none');
             setVal('picketType', 'none');
             setVal('picketSpacing', 0);
+            setVal('includeBasePlates', 'yes');
         } else if (style === 'villa_custom') {
             setVal('postType', 'hss_rect');
             setVal('postSize', 'HSS1.5x1.5x11GA');
@@ -1172,6 +1424,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setVal('midRailGap', 3.0);
             setVal('picketType', 'none');
             setVal('picketSpacing', 0);
+            setVal('includeBasePlates', 'yes');
         }
     }
 
@@ -1179,18 +1432,23 @@ document.addEventListener('DOMContentLoaded', () => {
         if (shapeCategory.value !== 'rail_catalog') return;
         const activeSet = balconyWizardState.tempSet || balconyWizardState.sets[balconyWizardState.activeSetIdx];
         const activePanel = balconyWizardState.activePanelType;
-        const panelObj = (activePanel === 'main' || activePanel === 'loosePost') ? activeSet.main : (activePanel === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
+        const panelObj = (activePanel === 'main' || (activePanel && activePanel.startsWith('loose'))) ? activeSet.main : (activePanel === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
         if (!panelObj) return;
+
+        const oldMainBP = (activeSet.main && activePanel === 'main') ? activeSet.main.includeBasePlates : null;
 
         dynamicInputs.querySelectorAll('input').forEach(inp => {
             const id = inp.id.replace('inp-', '');
             if (id === 'balconyDrawingNo' || id === 'railStyle' || id === 'wizLeftReturnToggle' || id === 'wizRightReturnToggle') return;
             if (inp.type === 'checkbox') {
                 panelObj[id] = inp.checked ? 'yes' : 'no';
-            } else if (inp.type === 'text') {
-                panelObj[id] = inp.value;
             } else {
-                panelObj[id] = parseFloat(inp.value) || 0;
+                const textFields = ['drawingNo', 'jobNo', 'fabNo', 'mainMark', 'jobName', 'gc', 'address', 'cityState', 'drawnBy', 'checkedBy', 'finishText'];
+                if (textFields.includes(id)) {
+                    panelObj[id] = inp.value;
+                } else {
+                    panelObj[id] = parseDimensionInput(inp.value);
+                }
             }
         });
         dynamicInputs.querySelectorAll('select').forEach(sel => {
@@ -1210,6 +1468,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (activeSet.rightReturn) {
                     activeSet.rightReturn.railStyle = styleSelect.value;
                     applyStyleDefaults(activeSet.rightReturn, styleSelect.value, true, 'rightReturn');
+                }
+            }
+        }
+
+        if (activePanel === 'main') {
+            const excludeKeysFromSync = new Set([
+                'length', 'originalLength', 'leftPost', 'rightPost', 'midPosts', 'midPostCount', 'midPostSpacings',
+                'looseExtraLen', 'looseOffsetX', 'looseOffsetY', 'looseLeftPost_extraLen', 'looseLeftPost_offsetX',
+                'looseLeftPost_offsetY', 'looseRightPost_extraLen', 'looseRightPost_offsetX', 'looseRightPost_offsetY'
+            ]);
+            for (const k in panelObj) {
+                if (!excludeKeysFromSync.has(k)) {
+                    if (activeSet.leftReturn) activeSet.leftReturn[k] = panelObj[k];
+                    if (activeSet.rightReturn) activeSet.rightReturn[k] = panelObj[k];
                 }
             }
         }
@@ -1241,15 +1513,74 @@ document.addEventListener('DOMContentLoaded', () => {
             if (activeSet.rightReturn) activeSet.rightReturn.freeEnd4 = chkFreeEnd4.checked;
         }
 
+        const currentLooseType = (activePanel && activePanel.startsWith('loose')) ? activePanel : 'loosePost';
+        const inpLooseExtra = document.getElementById('inp-loose-post-extra-len');
+        if (inpLooseExtra) {
+            const val = parseFloat(inpLooseExtra.value) || 0;
+            panelObj.looseExtraLen = val;
+            if (activeSet.main) {
+                activeSet.main.looseExtraLen = val;
+                activeSet.main[currentLooseType + '_extraLen'] = val;
+                activeSet.main[currentLooseType + '_hasCustomExtraLen'] = true;
+
+                // Sync to the other loose post type by default if the other hasn't been custom overridden
+                const otherLooseType = (currentLooseType === 'looseLeftPost') ? 'looseRightPost' : (currentLooseType === 'looseRightPost' ? 'looseLeftPost' : null);
+                if (otherLooseType && !activeSet.main[otherLooseType + '_hasCustomExtraLen']) {
+                    activeSet.main[otherLooseType + '_extraLen'] = val;
+                }
+            }
+        }
+        const inpLooseOffX = document.getElementById('inp-loose-post-offset-x');
+        if (inpLooseOffX) {
+            const val = parseFloat(inpLooseOffX.value) || 0;
+            panelObj.looseOffsetX = val;
+            if (activeSet.main) {
+                activeSet.main.looseOffsetX = val;
+                activeSet.main[currentLooseType + '_offsetX'] = val;
+            }
+        }
+        const inpLooseOffY = document.getElementById('inp-loose-post-offset-y');
+        if (inpLooseOffY) {
+            const val = parseFloat(inpLooseOffY.value) || 0;
+            panelObj.looseOffsetY = val;
+            if (activeSet.main) {
+                activeSet.main.looseOffsetY = val;
+                activeSet.main[currentLooseType + '_offsetY'] = val;
+            }
+        }
+        const inpLooseQty = document.getElementById('inp-loose-post-qty');
+        if (inpLooseQty) {
+            const val = parseFloat(inpLooseQty.value) || 1;
+            panelObj.looseQty = val;
+            if (activeSet.main) {
+                activeSet.main.looseQty = val;
+                activeSet.main[currentLooseType + '_qty'] = val;
+            }
+        }
+        const inpLooseBP = document.getElementById('inp-loose-post-include-bp');
+        if (inpLooseBP) {
+            const val = inpLooseBP.checked ? 'yes' : 'no';
+            panelObj.looseIncludeBasePlates = val;
+            if (activeSet.main) {
+                activeSet.main.looseIncludeBasePlates = val;
+                activeSet.main[currentLooseType + '_includeBasePlates'] = val;
+            }
+        }
+
         // Sync style/component properties from main panel to return panels
-        if (activeSet.main) {
-            const syncKeys = ['railStyle', 'postType', 'postSize', 'postW', 'postH', 'postT', 'topRailType', 'topRailSize', 'topRailW', 'topRailH', 'topRailT', 'botRailType', 'botRailSize', 'botRailW', 'botRailH', 'botRailT', 'midRailType', 'midRailSize', 'midRailW', 'midRailH', 'midRailT', 'midRailGap', 'picketType', 'picketSize', 'picketW', 'picketH', 'picketT', 'picketSpacing', 'includeBasePlates', 'basePlateConfig'];
+        if (activePanel === 'main' && activeSet.main) {
+            const syncKeys = ['railStyle', 'postType', 'postSize', 'postW', 'postH', 'postT', 'topRailType', 'topRailSize', 'topRailW', 'topRailH', 'topRailT', 'botRailType', 'botRailSize', 'botRailW', 'botRailH', 'botRailT', 'midRailType', 'midRailSize', 'midRailW', 'midRailH', 'midRailT', 'midRailGap', 'picketType', 'picketSize', 'picketW', 'picketH', 'picketT', 'picketSpacing', 'basePlateConfig'];
+            const bpChanged = (oldMainBP !== null && oldMainBP !== activeSet.main.includeBasePlates);
+            
             if (activeSet.leftReturn) {
                 syncKeys.forEach(k => {
                     if (activeSet.main[k] !== undefined) {
                         activeSet.leftReturn[k] = activeSet.main[k];
                     }
                 });
+                if (bpChanged) {
+                    activeSet.leftReturn.includeBasePlates = activeSet.main.includeBasePlates;
+                }
             }
             if (activeSet.rightReturn) {
                 syncKeys.forEach(k => {
@@ -1257,6 +1588,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         activeSet.rightReturn[k] = activeSet.main[k];
                     }
                 });
+                if (bpChanged) {
+                    activeSet.rightReturn.includeBasePlates = activeSet.main.includeBasePlates;
+                }
             }
         }
     }   
@@ -1264,7 +1598,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (shapeCategory.value !== 'rail_catalog') return;
         const activeSet = balconyWizardState.tempSet || balconyWizardState.sets[balconyWizardState.activeSetIdx];
         const activePanel = balconyWizardState.activePanelType;
-        const panelObj = (activePanel === 'main' || activePanel === 'loosePost') ? activeSet.main : (activePanel === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
+        const panelObj = (activePanel === 'main' || (activePanel && activePanel.startsWith('loose'))) ? activeSet.main : (activePanel === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
         if (!panelObj) return;
 
         applyStyleDefaults(panelObj, panelObj.railStyle || 'classical', false, activePanel);
@@ -1306,7 +1640,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const styleSelect = document.getElementById('inp-railStyle');
         if (styleSelect) {
-            styleSelect.value = panelObj.railStyle || 'classical';
+            if (!panelObj.railStyle) {
+                panelObj.railStyle = 'classical';
+            }
+            styleSelect.value = panelObj.railStyle;
+        }
+        if (!panelObj.customScaleOverride) {
+            panelObj.customScaleOverride = 'auto';
         }
 
         const chk6Extra = document.getElementById('chk-6-extra');
@@ -1391,6 +1731,31 @@ document.addEventListener('DOMContentLoaded', () => {
         const rightReturnToggle = document.getElementById('inp-wizRightReturnToggle');
         if (rightReturnToggle) {
             rightReturnToggle.value = activeSet.rightReturn ? 'yes' : 'no';
+        }
+
+        // Populate Loose Post Inputs if activeMode is loosePost
+        if (balconyWizardState.activeMode === 'loosePost') {
+            const currentLooseType = (activePanel && activePanel.startsWith('loose')) ? activePanel : 'loosePost';
+            const inpLooseExtra = document.getElementById('inp-loose-post-extra-len');
+            if (inpLooseExtra) {
+                const val = (activeSet.main && activeSet.main[currentLooseType + '_extraLen'] !== undefined) ? activeSet.main[currentLooseType + '_extraLen'] : (panelObj.looseExtraLen || 0);
+                inpLooseExtra.value = val;
+            }
+            const inpLooseOffX = document.getElementById('inp-loose-post-offset-x');
+            if (inpLooseOffX) {
+                const val = (activeSet.main && activeSet.main[currentLooseType + '_offsetX'] !== undefined) ? activeSet.main[currentLooseType + '_offsetX'] : (panelObj.looseOffsetX || 0);
+                inpLooseOffX.value = val;
+            }
+            const inpLooseOffY = document.getElementById('inp-loose-post-offset-y');
+            if (inpLooseOffY) {
+                const val = (activeSet.main && activeSet.main[currentLooseType + '_offsetY'] !== undefined) ? activeSet.main[currentLooseType + '_offsetY'] : (panelObj.looseOffsetY || 0);
+                inpLooseOffY.value = val;
+            }
+            const inpLooseQty = document.getElementById('inp-loose-post-qty');
+            if (inpLooseQty) {
+                const val = (activeSet.main && activeSet.main[currentLooseType + '_qty'] !== undefined) ? activeSet.main[currentLooseType + '_qty'] : (panelObj.looseQty || 1);
+                inpLooseQty.value = val;
+            }
         }
     }
     
@@ -1978,6 +2343,46 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const chkLoosePostMode = document.getElementById('chk-loose-post-mode');
+    const grpLoosePostOptions = document.getElementById('grp-loose-post-options');
+    if (chkLoosePostMode) {
+        chkLoosePostMode.addEventListener('change', () => {
+            saveCurrentInputsToActivePanel();
+            if (chkLoosePostMode.checked) {
+                if (grpLoosePostOptions) grpLoosePostOptions.classList.remove('hidden');
+                balconyWizardState.activeMode = 'loosePost';
+                const activeSet = balconyWizardState.tempSet || balconyWizardState.sets[balconyWizardState.activeSetIdx];
+                const style = activeSet?.main?.railStyle || 'classical';
+                const isMeshStyle = (style === 'urban_balcony' || style === 'villa_balcony' || style === 'urban_custom' || style === 'villa_custom');
+                balconyWizardState.activePanelType = isMeshStyle ? 'looseLeftPost' : 'loosePost';
+            } else {
+                if (grpLoosePostOptions) grpLoosePostOptions.classList.add('hidden');
+                balconyWizardState.activeMode = 'panel';
+                balconyWizardState.activePanelType = 'main';
+            }
+            updateInputs();
+            renderCurrentCAD();
+            updateBOMPreview();
+            if (pdfPreviewModeActive) {
+                updatePdfPreview();
+            }
+        });
+    }
+
+    ['inp-loose-post-extra-len', 'inp-loose-post-offset-x', 'inp-loose-post-offset-y'].forEach(id => {
+        const inp = document.getElementById(id);
+        if (inp) {
+            inp.addEventListener('input', () => {
+                saveCurrentInputsToActivePanel();
+                renderCurrentCAD();
+                updateBOMPreview();
+                if (pdfPreviewModeActive) {
+                    updatePdfPreview();
+                }
+            });
+        }
+    });
+
     // Panning Mode Toggle Button Listener
     const togglePanModeBtn = document.getElementById('toggle-pan-mode');
     if (togglePanModeBtn) {
@@ -2047,9 +2452,15 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateInputs() {
         const cat = shapeCategory.value;
 
-        if (cat === 'rail_catalog' && typeof balconyWizardState !== 'undefined' && balconyWizardState.activeMode === 'basePlate') {
-            renderBasePlateEditor();
-            return;
+        if (cat === 'rail_catalog' && typeof balconyWizardState !== 'undefined') {
+            if (balconyWizardState.activeMode === 'basePlate') {
+                renderBasePlateEditor();
+                return;
+            }
+            if (balconyWizardState.activeMode === 'loosePost') {
+                renderLoosePostEditor();
+                return;
+            }
         }
 
         // Define helper functions at the top of updateInputs so they are available to all categories (e.g. rail_catalog, fence, rails_gates)
@@ -2102,10 +2513,12 @@ document.addEventListener('DOMContentLoaded', () => {
             typeSelect.updateSizes = updateSizes;
             
             typeSelect.addEventListener('change', () => {
+                saveCurrentInputsToActivePanel();
                 updateSizes();
                 renderCurrentCAD();
             });
             sizeSelect.addEventListener('change', () => {
+                saveCurrentInputsToActivePanel();
                 toggleCustom();
                 renderCurrentCAD();
             });
@@ -2120,10 +2533,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const bpTGroup = document.getElementById('grp-basePlateT');
             const bpSizeSelect = document.getElementById('inp-basePlateSize');
             
-            if (!includeSelect || !bpSizeSelect) return;
+            if (!includeSelect) return;
             
             const updateVisibility = () => {
-                const active = includeSelect.value === 'yes';
+                const active = includeSelect.type === 'checkbox' ? includeSelect.checked : includeSelect.value === 'yes';
                 if (bpDetailsGroup) {
                     if (active) {
                         bpDetailsGroup.classList.remove('hidden');
@@ -2135,7 +2548,7 @@ document.addEventListener('DOMContentLoaded', () => {
             };
             
             const toggleCustom = () => {
-                if (bpTGroup) {
+                if (bpTGroup && bpSizeSelect) {
                     if (bpSizeSelect.value === 'CUSTOM') {
                         bpTGroup.classList.remove('hidden');
                     } else {
@@ -2146,16 +2559,20 @@ document.addEventListener('DOMContentLoaded', () => {
             
             includeSelect.updateVisibility = updateVisibility;
             
-            // Populate size select with standard plates
-            bpSizeSelect.innerHTML = SHAPES_DB['plate'].map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-            bpSizeSelect.value = 'PL1/2';
+            if (bpSizeSelect) {
+                // Populate size select with standard plates
+                bpSizeSelect.innerHTML = SHAPES_DB['plate'].map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+                bpSizeSelect.value = 'PL1/2';
+                bpSizeSelect.addEventListener('change', () => {
+                    saveCurrentInputsToActivePanel();
+                    toggleCustom();
+                    renderCurrentCAD();
+                });
+            }
             
             includeSelect.addEventListener('change', () => {
+                saveCurrentInputsToActivePanel();
                 updateVisibility();
-                renderCurrentCAD();
-            });
-            bpSizeSelect.addEventListener('change', () => {
-                toggleCustom();
                 renderCurrentCAD();
             });
             
@@ -2163,8 +2580,8 @@ document.addEventListener('DOMContentLoaded', () => {
             ['basePlateW', 'basePlateL', 'basePlateT', 'basePlateHoleD', 'basePlateHoleOffsetX', 'basePlateHoleOffsetY'].forEach(id => {
                 const inp = document.getElementById('inp-' + id);
                 if (inp) {
-                    inp.addEventListener('input', renderCurrentCAD);
-                    inp.addEventListener('change', renderCurrentCAD);
+                    inp.addEventListener('input', () => { saveCurrentInputsToActivePanel(); renderCurrentCAD(); });
+                    inp.addEventListener('change', () => { saveCurrentInputsToActivePanel(); renderCurrentCAD(); });
                 }
             });
             
@@ -2186,6 +2603,7 @@ document.addEventListener('DOMContentLoaded', () => {
             };
             
             midType.addEventListener('change', () => {
+                saveCurrentInputsToActivePanel();
                 updateGapVisibility();
                 renderCurrentCAD();
             });
@@ -2222,6 +2640,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             
             postHInput.addEventListener('change', () => {
+                saveCurrentInputsToActivePanel();
                 updateSpacingVisibility();
                 renderCurrentCAD();
             });
@@ -2429,7 +2848,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let html = '<div class="inputs-grid">' + wizardHtml;
             
             const activePanel = balconyWizardState.activePanelType;
-            const panelObj = (activePanel === 'main' || activePanel === 'loosePost') ? activeSet.main : (activePanel === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
+            const panelObj = (activePanel === 'main' || (activePanel && activePanel.startsWith('loose'))) ? activeSet.main : (activePanel === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
 
             if (!panelObj) {
                 const panelLabel = activePanel === 'main' ? 'Main Panel' : (activePanel === 'leftReturn' ? 'Left Return' : 'Right Return');
@@ -2445,17 +2864,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 `;
             } else {
-                // Style Selection
+                // Style Selection (Exact Requested Order)
                 html += generateSelectInput('Rail Style', 'railStyle', [
                     { val: 'classical', lbl: 'Classical Style (Preset)' },
                     { val: 'executive', lbl: 'Executive Style (Preset)' },
-                    { val: 'urban_balcony', lbl: 'Urban Balcony Rail (Preset)' },
-                    { val: 'villa_balcony', lbl: 'Villa Balcony Rail (Preset)' },
-                    { val: 'classic_custom', lbl: 'Classic Custom' },
-                    { val: 'executive_custom', lbl: 'Executive Custom' },
-                    { val: 'urban_custom', lbl: 'Urban Balcony Rail Custom' },
-                    { val: 'villa_custom', lbl: 'Villa Balcony Rail Custom' }
-                ], 'classical');
+                    { val: 'urban_balcony', lbl: 'Urban Style (Preset)' },
+                    { val: 'villa_balcony', lbl: 'Villa Style (Preset)' },
+                    { val: 'classic_custom', lbl: 'Classic Style Custom' },
+                    { val: 'executive_custom', lbl: 'Executive Style Custom' },
+                    { val: 'urban_custom', lbl: 'Urban Style Custom' },
+                    { val: 'villa_custom', lbl: 'Villa Style Custom' }
+                ], panelObj.railStyle || 'classical');
 
                 // Length
                 html += generateNumInput('Total Length (in)', 'length', 120);
@@ -2712,10 +3131,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 railStyleSelect.addEventListener('change', () => {
                     const activeSet = balconyWizardState.tempSet || balconyWizardState.sets[balconyWizardState.activeSetIdx];
                     const activePanel = balconyWizardState.activePanelType;
-                    const panelObj = (activePanel === 'main' || activePanel === 'loosePost') ? activeSet.main : (activePanel === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
+                    const panelObj = (activePanel === 'main' || (activePanel && activePanel.startsWith('loose'))) ? activeSet.main : (activePanel === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
                     if (panelObj) {
                         panelObj.railStyle = railStyleSelect.value;
                         applyStyleDefaults(panelObj, railStyleSelect.value, true);
+                        const styleLower = (railStyleSelect.value || '').toLowerCase();
+                        if (!styleLower.includes('custom') && panelObj.basePlateConfig && panelObj.basePlateConfig.connectionType === 'wall_mount') {
+                            panelObj.basePlateConfig.connectionType = 'bottom';
+                        }
                         loadActivePanelToInputs();
                     }
                     toggleCustomOptions();
@@ -2895,6 +3318,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     updateInputs();
                     loadActivePanelToInputs();
                     renderCurrentCAD();
+                    updateBOMPreview();
+                    if (typeof pdfPreviewModeActive !== 'undefined' && pdfPreviewModeActive) {
+                        debouncedUpdatePdfPreview(50);
+                    }
                 });
             });
 
@@ -4108,7 +4535,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             // Show post options in rails mode
                             if (postHGroup) postHGroup.classList.remove('hidden');
                             if (bpGroup) bpGroup.classList.remove('hidden');
-                            const active = document.getElementById('inp-includeBasePlates')?.value === 'yes';
+                            const active = document.getElementById('inp-includeBasePlates')?.checked;
                             if (active) {
                                 document.getElementById('grp-basePlateSizeGroup')?.classList.remove('hidden');
                                 document.getElementById('grp-basePlateW')?.classList.remove('hidden');
@@ -4344,9 +4771,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function generateNumInput(label, id, def) {
+        let cleanLabel = label;
+        if (cleanLabel.endsWith('(in)')) {
+            cleanLabel = cleanLabel.replace('(in)', '(ft-in / in)');
+        }
         return `<div class="input-group">
-                    <label>${label}</label>
-                    <input type="number" id="inp-${id}" value="${def}" step="0.01">
+                    <label>${cleanLabel}</label>
+                    <input type="text" id="inp-${id}" value="${def}" placeholder="e.g. 12' or 144">
                 </div>`;
     }
 
@@ -4359,6 +4790,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>`;
     }
 
+    let pdfPreviewDebounceTimer = null;
+    function debouncedUpdatePdfPreview(delay = 200) {
+        if (pdfPreviewDebounceTimer) clearTimeout(pdfPreviewDebounceTimer);
+        pdfPreviewDebounceTimer = setTimeout(() => {
+            updatePdfPreview();
+        }, delay);
+    }
+
     async function updatePdfPreview() {
         if (isGeneratingZipBatch) return;
         const activeSet = balconyWizardState.tempSet || balconyWizardState.sets[balconyWizardState.activeSetIdx];
@@ -4366,7 +4805,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (shapeCategory.value === 'rail_catalog' && typeof balconyWizardState !== 'undefined' && balconyWizardState.activeMode === 'basePlate') {
             const activePanel = balconyWizardState.activePanelType;
-            const panelObj = (activePanel === 'main' || activePanel === 'loosePost') ? activeSet.main : (activePanel === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
+            const panelObj = (activePanel === 'main' || (activePanel && activePanel.startsWith('loose'))) ? activeSet.main : (activePanel === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
             if (panelObj && panelObj.basePlateConfig) {
                 updateBasePlatePDFPreview(panelObj.basePlateConfig);
             }
@@ -4379,13 +4818,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const needFBOM = false;
         
         let flatModel;
-        if (balconyWizardState.activePanelType === 'loosePost') {
+        if (balconyWizardState.activePanelType && balconyWizardState.activePanelType.startsWith('loose')) {
             const style = (activeSet.main && activeSet.main.railStyle) ? activeSet.main.railStyle : 'classical';
             const props = getResolvedPanelProperties(activeSet.main, style);
+            const activeType = balconyWizardState.activePanelType || 'loosePost';
+            const mainPanel = activeSet.main || {};
+            const extraLen = mainPanel[activeType + '_extraLen'] ?? mainPanel.looseExtraLen ?? (parseFloat(document.getElementById('inp-loose-post-extra-len')?.value) || 0);
+            const offsetX = getLoosePostOffsetX(mainPanel, activeType);
+            const offsetY = getLoosePostOffsetY(mainPanel, activeType);
+            const looseIncBP = mainPanel[activeType + '_includeBasePlates'] ?? mainPanel.looseIncludeBasePlates ?? props?.includeBasePlates ?? 'yes';
+
             flatModel = props ? CadEngine.createLoosePostModel(
                 props.postW, props.pHeight, props.topRailH, props.postType, props.postT, 
-                props.includeBasePlates, props.bpW, props.bpL, props.bpH, props.bpHoleD, props.bpHoleOffsetX, props.bpHoleOffsetY, 
-                style, props.fHeight, props.botRailH, props.midRailType, props.midRailGap, props.midRailH
+                looseIncBP, props.bpW, props.bpL, props.bpH, props.bpHoleD, props.bpHoleOffsetX, props.bpHoleOffsetY, 
+                style, props.fHeight, props.botRailH, props.midRailType, props.midRailGap, props.midRailH,
+                (balconyWizardState.activePanelType === 'looseRightPost' ? 'right' : 'left'),
+                extraLen, offsetX, offsetY, mainPanel.basePlateConfig
             ) : null;
         } else {
             flatModel = CadEngine.createCombinedBalconyModel(activeSet, balconyWizardState.activePanelType, false);
@@ -4408,7 +4856,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 'ENG', 
                 'QIW', 
                 false, 
-                (balconyWizardState.activePanelType === 'loosePost'), 
+                (balconyWizardState.activePanelType && balconyWizardState.activePanelType.startsWith('loose')), 
                 activeSet.quantity || 1, 
                 balconyWizardState.activePanelType || 'main',
                 true, // isPreviewOnly = true
@@ -4427,6 +4875,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (e) {
             console.error("Failed to generate real-time PDF preview:", e);
+            alert("Failed to generate real-time PDF preview:\n" + e.message + "\n\nStack:\n" + e.stack);
         }
     }
 
@@ -4437,7 +4886,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (cat === 'rail_catalog' && typeof balconyWizardState !== 'undefined' && balconyWizardState.activeMode === 'basePlate') {
             const activeSet = balconyWizardState.tempSet || balconyWizardState.sets[balconyWizardState.activeSetIdx];
             const activePanel = balconyWizardState.activePanelType;
-            const panelObj = (activePanel === 'main' || activePanel === 'loosePost') ? activeSet.main : (activePanel === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
+            const panelObj = (activePanel === 'main' || (activePanel && activePanel.startsWith('loose'))) ? activeSet.main : (activePanel === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
             if (panelObj && panelObj.basePlateConfig) {
                 updateBasePlateCADPreview(panelObj.basePlateConfig);
             }
@@ -4448,7 +4897,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         dynamicInputs.querySelectorAll('input').forEach(inp => {
             const id = inp.id.replace('inp-', '');
-            vals[id] = (inp.type === 'text') ? inp.value : (parseFloat(inp.value) || 0);
+            vals[id] = (inp.type === 'checkbox') ? (inp.checked ? 'yes' : 'no') : ((inp.type === 'text') ? inp.value : (parseFloat(inp.value) || 0));
         });
         dynamicInputs.querySelectorAll('select').forEach(sel => {
             vals[sel.id.replace('inp-', '')] = sel.value;
@@ -4585,12 +5034,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 const activeSet = balconyWizardState.tempSet || balconyWizardState.sets[balconyWizardState.activeSetIdx];
                 const style = (activeSet.main && activeSet.main.railStyle) ? activeSet.main.railStyle : ((activeSet.leftReturn && activeSet.leftReturn.railStyle) ? activeSet.leftReturn.railStyle : ((activeSet.rightReturn && activeSet.rightReturn.railStyle) ? activeSet.rightReturn.railStyle : 'classical'));
                 
-                if (balconyWizardState.activePanelType === 'loosePost') {
+                if (balconyWizardState.activePanelType && balconyWizardState.activePanelType.startsWith('loose')) {
                     const props = getResolvedPanelProperties(activeSet.main, style);
+                    const activeType = balconyWizardState.activePanelType || 'loosePost';
+                    const mainPanel = activeSet.main || {};
+                    const extraLen = mainPanel[activeType + '_extraLen'] ?? mainPanel.looseExtraLen ?? (parseFloat(document.getElementById('inp-loose-post-extra-len')?.value) || 0);
+                    const offsetX = getLoosePostOffsetX(mainPanel, activeType);
+                    const offsetY = getLoosePostOffsetY(mainPanel, activeType);
+                    const looseIncBP = mainPanel[activeType + '_includeBasePlates'] ?? mainPanel.looseIncludeBasePlates ?? props?.includeBasePlates ?? 'yes';
+
                     currentModel = props ? CadEngine.createLoosePostModel(
                         props.postW, props.pHeight, props.topRailH, props.postType, props.postT, 
-                        props.includeBasePlates, props.bpW, props.bpL, props.bpH, props.bpHoleD, props.bpHoleOffsetX, props.bpHoleOffsetY, 
-                        style, props.fHeight, props.botRailH, props.midRailType, props.midRailGap, props.midRailH
+                        looseIncBP, props.bpW, props.bpL, props.bpH, props.bpHoleD, props.bpHoleOffsetX, props.bpHoleOffsetY, 
+                        style, props.fHeight, props.botRailH, props.midRailType, props.midRailGap, props.midRailH,
+                        (balconyWizardState.activePanelType === 'looseRightPost' ? 'right' : 'left'),
+                        extraLen, offsetX, offsetY, mainPanel.basePlateConfig
                     ) : null;
                 } else {
                     currentModel = CadEngine.createCombinedBalconyModel(activeSet, balconyWizardState.activePanelType, isPreview);
@@ -5075,7 +5533,7 @@ document.addEventListener('DOMContentLoaded', () => {
             dynamicInputs.querySelectorAll('input').forEach(inp => {
                 if (inp.id) {
                     const id = inp.id.replace('inp-', '');
-                    vals[id] = (inp.type === 'text') ? inp.value : (parseFloat(inp.value) || 0);
+                    vals[id] = (inp.type === 'checkbox') ? (inp.checked ? 'yes' : 'no') : ((inp.type === 'text') ? inp.value : (parseFloat(inp.value) || 0));
                 }
             });
             dynamicInputs.querySelectorAll('select').forEach(sel => {
@@ -5189,13 +5647,13 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         } else if (cat === 'rail_catalog') {
             const activePanelType = balconyWizardState.activePanelType || 'main';
-            const isLoose = (activePanelType === 'loosePost');
+            const isLoose = ((activePanelType && activePanelType.startsWith('loose')));
             const style = vals.railStyle || 'classical';
             const props = getResolvedPanelProperties(vals, style);
             
             const activeSet = balconyWizardState.tempSet || (balconyWizardState.sets ? balconyWizardState.sets[balconyWizardState.activeSetIdx] : null);
             if (activeSet) {
-                const panelObj = (activePanelType === 'main' || activePanelType === 'loosePost') ? activeSet.main : (activePanelType === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
+                const panelObj = (activePanelType === 'main' || (activePanelType && activePanelType.startsWith('loose'))) ? activeSet.main : (activePanelType === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
                 if (panelObj) {
                     for (const key in panelObj) {
                         vals[key] = panelObj[key];
@@ -5221,7 +5679,12 @@ document.addEventListener('DOMContentLoaded', () => {
             };
 
             if (isLoose) {
-                let includeBasePlates = props ? props.includeBasePlates : 'no';
+                const activeType = balconyWizardState.activePanelType || 'loosePost';
+                let includeBasePlates = (vals[activeType + '_includeBasePlates'] !== undefined)
+                    ? vals[activeType + '_includeBasePlates']
+                    : (vals.looseIncludeBasePlates !== undefined
+                        ? vals.looseIncludeBasePlates
+                        : (props ? props.includeBasePlates : 'yes'));
                 const isMeshStyle = (style === 'urban_balcony' || style === 'villa_balcony' || style === 'urban_custom' || style === 'villa_custom');
                 
                 // 1. Loose Post (aDrawingNo)
@@ -5668,47 +6131,86 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Check for loose posts
                 const postType = set.main.postType || 'hss_rect';
+                const isMeshStyle = (style === 'urban_balcony' || style === 'villa_balcony' || style === 'urban_custom' || style === 'villa_custom');
+                let looseLeftQty = 0;
+                let looseRightQty = 0;
                 let looseQty = 0;
-                if (set.leftReturn) {
-                    if (set.leftReturn.leftPost === 'none' || set.leftReturn.leftPost === 'no') {
-                        looseQty++;
+                
+                if (isMeshStyle) {
+                    if (set.leftReturn) {
+                        if (set.leftReturn.leftPost === 'none' || set.leftReturn.leftPost === 'no') looseLeftQty++;
+                        if ((set.main.leftPost === 'none' || set.main.leftPost === 'no') && 
+                            (set.leftReturn.rightPost === 'none' || set.leftReturn.rightPost === 'no')) looseLeftQty++;
+                    } else {
+                        if (set.main.leftPost === 'none' || set.main.leftPost === 'no') looseLeftQty++;
                     }
-                    if ((set.main.leftPost === 'none' || set.main.leftPost === 'no') && 
-                        (set.leftReturn.rightPost === 'none' || set.leftReturn.rightPost === 'no')) {
-                        looseQty++;
+
+                    if (set.rightReturn) {
+                        if (set.rightReturn.rightPost === 'none' || set.rightReturn.rightPost === 'no') looseRightQty++;
+                        if ((set.main.rightPost === 'none' || set.main.rightPost === 'no') && 
+                            (set.rightReturn.leftPost === 'none' || set.rightReturn.leftPost === 'no')) looseRightQty++;
+                    } else {
+                        if (set.main.rightPost === 'none' || set.main.rightPost === 'no') looseRightQty++;
                     }
                 } else {
-                    if (set.main.leftPost === 'none' || set.main.leftPost === 'no') {
-                        looseQty++;
+                    if (set.leftReturn) {
+                        if (set.leftReturn.leftPost === 'none' || set.leftReturn.leftPost === 'no') looseQty++;
+                        if ((set.main.leftPost === 'none' || set.main.leftPost === 'no') && 
+                            (set.leftReturn.rightPost === 'none' || set.leftReturn.rightPost === 'no')) looseQty++;
+                    } else {
+                        if (set.main.leftPost === 'none' || set.main.leftPost === 'no') looseQty++;
+                    }
+
+                    if (set.rightReturn) {
+                        if (set.rightReturn.rightPost === 'none' || set.rightReturn.rightPost === 'no') looseQty++;
+                        if ((set.main.rightPost === 'none' || set.main.rightPost === 'no') && 
+                            (set.rightReturn.leftPost === 'none' || set.rightReturn.leftPost === 'no')) looseQty++;
+                    } else {
+                        if (set.main.rightPost === 'none' || set.main.rightPost === 'no') looseQty++;
                     }
                 }
 
-                if (set.rightReturn) {
-                    if (set.rightReturn.rightPost === 'none' || set.rightReturn.rightPost === 'no') {
-                        looseQty++;
+                if (isMeshStyle) {
+                    if (looseLeftQty > 0) {
+                        allPanelItems.push({
+                            id: `set${setIdx}_looseLeftPost`,
+                            setIdx: setIdx,
+                            panelType: 'looseLeftPost',
+                            panelData: set.main,
+                            originalDrawingNo: baseDwg + ".1L",
+                            originalMainMark: baseDwg + "LP",
+                            quantity: looseLeftQty * setQty,
+                            signature: getLoosePostSignature(set.main, style, setIdx) + "_L",
+                            sheetName: `Loose Corner Post (Left)`
+                        });
                     }
-                    if ((set.main.rightPost === 'none' || set.main.rightPost === 'no') && 
-                        (set.rightReturn.leftPost === 'none' || set.rightReturn.leftPost === 'no')) {
-                        looseQty++;
+                    if (looseRightQty > 0) {
+                        allPanelItems.push({
+                            id: `set${setIdx}_looseRightPost`,
+                            setIdx: setIdx,
+                            panelType: 'looseRightPost',
+                            panelData: set.main,
+                            originalDrawingNo: baseDwg + ".1R",
+                            originalMainMark: baseDwg + "RP",
+                            quantity: looseRightQty * setQty,
+                            signature: getLoosePostSignature(set.main, style, setIdx) + "_R",
+                            sheetName: `Loose Corner Post (Right)`
+                        });
                     }
                 } else {
-                    if (set.main.rightPost === 'none' || set.main.rightPost === 'no') {
-                        looseQty++;
+                    if (looseQty > 0) {
+                        allPanelItems.push({
+                            id: `set${setIdx}_loosePost`,
+                            setIdx: setIdx,
+                            panelType: 'loosePost',
+                            panelData: set.main,
+                            originalDrawingNo: baseDwg + ".1",
+                            originalMainMark: baseDwg + "P1",
+                            quantity: looseQty * setQty,
+                            signature: getLoosePostSignature(set.main, style, setIdx),
+                            sheetName: `Loose Corner Post`
+                        });
                     }
-                }
-
-                if (looseQty > 0) {
-                    allPanelItems.push({
-                        id: `set${setIdx}_loosePost`,
-                        setIdx: setIdx,
-                        panelType: 'loosePost',
-                        panelData: set.main,
-                        originalDrawingNo: baseDwg + ".1",
-                        originalMainMark: baseDwg + "P1",
-                        quantity: looseQty * setQty,
-                        signature: getLoosePostSignature(set.main, style, setIdx),
-                        sheetName: `Loose Corner Post`
-                    });
                 }
             }
 
@@ -6071,46 +6573,83 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Check for loose posts
                 const postType = set.main.postType || 'hss_rect';
+                const isMeshStyle = (style === 'urban_balcony' || style === 'villa_balcony' || style === 'urban_custom' || style === 'villa_custom');
+                let looseLeftQty = 0;
+                let looseRightQty = 0;
                 let looseQty = 0;
-                if (set.leftReturn) {
-                    if (set.leftReturn.leftPost === 'none' || set.leftReturn.leftPost === 'no') {
-                        looseQty++;
+                
+                if (isMeshStyle) {
+                    if (set.leftReturn) {
+                        if (set.leftReturn.leftPost === 'none' || set.leftReturn.leftPost === 'no') looseLeftQty++;
+                        if ((set.main.leftPost === 'none' || set.main.leftPost === 'no') && 
+                            (set.leftReturn.rightPost === 'none' || set.leftReturn.rightPost === 'no')) looseLeftQty++;
+                    } else {
+                        if (set.main.leftPost === 'none' || set.main.leftPost === 'no') looseLeftQty++;
                     }
-                    if ((set.main.leftPost === 'none' || set.main.leftPost === 'no') && 
-                        (set.leftReturn.rightPost === 'none' || set.leftReturn.rightPost === 'no')) {
-                        looseQty++;
+
+                    if (set.rightReturn) {
+                        if (set.rightReturn.rightPost === 'none' || set.rightReturn.rightPost === 'no') looseRightQty++;
+                        if ((set.main.rightPost === 'none' || set.main.rightPost === 'no') && 
+                            (set.rightReturn.leftPost === 'none' || set.rightReturn.leftPost === 'no')) looseRightQty++;
+                    } else {
+                        if (set.main.rightPost === 'none' || set.main.rightPost === 'no') looseRightQty++;
                     }
                 } else {
-                    if (set.main.leftPost === 'none' || set.main.leftPost === 'no') {
-                        looseQty++;
+                    if (set.leftReturn) {
+                        if (set.leftReturn.leftPost === 'none' || set.leftReturn.leftPost === 'no') looseQty++;
+                        if ((set.main.leftPost === 'none' || set.main.leftPost === 'no') && 
+                            (set.leftReturn.rightPost === 'none' || set.leftReturn.rightPost === 'no')) looseQty++;
+                    } else {
+                        if (set.main.leftPost === 'none' || set.main.leftPost === 'no') looseQty++;
+                    }
+
+                    if (set.rightReturn) {
+                        if (set.rightReturn.rightPost === 'none' || set.rightReturn.rightPost === 'no') looseQty++;
+                        if ((set.main.rightPost === 'none' || set.main.rightPost === 'no') && 
+                            (set.rightReturn.leftPost === 'none' || set.rightReturn.leftPost === 'no')) looseQty++;
+                    } else {
+                        if (set.main.rightPost === 'none' || set.main.rightPost === 'no') looseQty++;
                     }
                 }
 
-                if (set.rightReturn) {
-                    if (set.rightReturn.rightPost === 'none' || set.rightReturn.rightPost === 'no') {
-                        looseQty++;
+                if (isMeshStyle) {
+                    if (looseLeftQty > 0) {
+                        allPanelItems.push({
+                            id: `set${setIdx}_looseLeftPost`,
+                            setIdx: setIdx,
+                            panelType: 'looseLeftPost',
+                            panelData: set.main,
+                            originalDrawingNo: baseDwg + ".1L",
+                            originalMainMark: baseDwg + "LP",
+                            quantity: looseLeftQty * setQty,
+                            signature: getLoosePostSignature(set.main, style, setIdx) + "_L"
+                        });
                     }
-                    if ((set.main.rightPost === 'none' || set.main.rightPost === 'no') && 
-                        (set.rightReturn.leftPost === 'none' || set.rightReturn.leftPost === 'no')) {
-                        looseQty++;
+                    if (looseRightQty > 0) {
+                        allPanelItems.push({
+                            id: `set${setIdx}_looseRightPost`,
+                            setIdx: setIdx,
+                            panelType: 'looseRightPost',
+                            panelData: set.main,
+                            originalDrawingNo: baseDwg + ".1R",
+                            originalMainMark: baseDwg + "RP",
+                            quantity: looseRightQty * setQty,
+                            signature: getLoosePostSignature(set.main, style, setIdx) + "_R"
+                        });
                     }
                 } else {
-                    if (set.main.rightPost === 'none' || set.main.rightPost === 'no') {
-                        looseQty++;
+                    if (looseQty > 0) {
+                        allPanelItems.push({
+                            id: `set${setIdx}_loosePost`,
+                            setIdx: setIdx,
+                            panelType: 'loosePost',
+                            panelData: set.main,
+                            originalDrawingNo: baseDwg + ".1",
+                            originalMainMark: baseDwg + "P1",
+                            quantity: looseQty * setQty,
+                            signature: getLoosePostSignature(set.main, style, setIdx)
+                        });
                     }
-                }
-
-                if (looseQty > 0) {
-                    allPanelItems.push({
-                        id: `set${setIdx}_loosePost`,
-                        setIdx: setIdx,
-                        panelType: 'loosePost',
-                        panelData: set.main,
-                        originalDrawingNo: baseDwg + ".1",
-                        originalMainMark: baseDwg + "P1",
-                        quantity: looseQty * setQty,
-                        signature: getLoosePostSignature(set.main, style, setIdx)
-                    });
                 }
             }
 
@@ -6199,7 +6738,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Generate drawing PDFs for Master items only
         const uniqueMasterItems = filteredPanelItems.filter(item => item.isMaster);
         for (const p of uniqueMasterItems) {
-            if (p.panelType === 'loosePost') {
+            if ((p.panelType && p.panelType.startsWith('loose'))) {
                 balconyWizardState.activeSetIdx = p.setIdx;
                 balconyWizardState.activePanelType = 'main'; // loose post uses main inputs
                 loadActivePanelToInputs();
@@ -6211,11 +6750,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     resolved.postH = 1.5;
                     resolved.postT = 0.1196;
                 }
+                const currentLooseType = p.panelType || 'loosePost';
+                const looseIncBP = (p.panelData[currentLooseType + '_includeBasePlates'] !== undefined)
+                    ? p.panelData[currentLooseType + '_includeBasePlates']
+                    : (p.panelData.looseIncludeBasePlates !== undefined
+                        ? p.panelData.looseIncludeBasePlates
+                        : resolved.includeBasePlates);
                 currentModel = CadEngine.createLoosePostModel(
                     resolved.postW, resolved.pHeight, resolved.topRailH, resolved.postType, resolved.postT,
-                    resolved.includeBasePlates, resolved.bpW, resolved.bpL, resolved.bpH,
+                    looseIncBP, resolved.bpW, resolved.bpL, resolved.bpH,
                     resolved.bpHoleD, resolved.bpHoleOffsetX, resolved.bpHoleOffsetY,
-                    p.panelData.railStyle || 'classical', resolved.fHeight, resolved.botRailH, resolved.midRailType, resolved.midRailGap, resolved.midRailH
+                    p.panelData.railStyle || 'classical', resolved.fHeight, resolved.botRailH, resolved.midRailType, resolved.midRailGap, resolved.midRailH,
+                    (p.panelType === 'looseRightPost' ? 'right' : 'left'),
+                    0, 0, 0, resolved.basePlateConfig
                 );
 
                 // Render manually to svgContainer
@@ -6231,7 +6778,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             try {
-                const isLoose = (p.panelType === 'loosePost');
+                const isLoose = ((p.panelType && p.panelType.startsWith('loose')));
                 const result = await generateBlueprintPDF(
                     p.originalDrawingNo, fabNo, jobNo, p.originalMainMark, revision, finishText, 
                     false, jobName, gc, address, cityState, drawnBy, checkedBy, true, isLoose, p.groupTotalQty, p.panelType,
@@ -6256,7 +6803,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const group = groupsBySignature[sig];
             const master = group[0];
             const totalGroupQty = group.reduce((sum, item) => sum + item.quantity, 0);
-            const bomItems = master.bomItems || [];
+            const bomItems = consolidateBOMItems(master.bomItems || []);
 
             bomItems.forEach(item => {
                 let shapeCol = (item.shape || '').toUpperCase();
@@ -6427,7 +6974,7 @@ document.addEventListener('DOMContentLoaded', () => {
         summaryDoc.setFont('helvetica', 'normal');
         summaryDoc.setFontSize(7.5);
 
-        const componentOrder = { 'main': 1, 'loosePost': 2, 'leftReturn': 3, 'rightReturn': 4 };
+        const componentOrder = { 'main': 1, 'loosePost': 2, 'looseLeftPost': 2.1, 'looseRightPost': 2.2, 'leftReturn': 3, 'rightReturn': 4 };
         const sortedItems = [...filteredPanelItems].sort((a, b) => {
             if (a.setIdx !== b.setIdx) return a.setIdx - b.setIdx;
             return componentOrder[a.panelType] - componentOrder[b.panelType];
@@ -6461,6 +7008,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (item.panelType === 'leftReturn') compLabel = "Left Return";
             else if (item.panelType === 'rightReturn') compLabel = "Right Return";
             else if (item.panelType === 'loosePost') compLabel = "Loose Corner Post";
+                                   else if (item.panelType === 'looseLeftPost') compLabel = "Loose Corner Post (Left)";
+                                   else if (item.panelType === 'looseRightPost') compLabel = "Loose Corner Post (Right)";
 
             const origDwg = `${item.originalDrawingNo} (${item.originalMainMark})`;
             const assignedDwg = `${item.masterDrawingNo} (${item.masterMainMark})`;
@@ -6608,7 +7157,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const vals = {};
             dynamicInputs.querySelectorAll('input').forEach(inp => {
                 const id = inp.id.replace('inp-', '');
-                vals[id] = (inp.type === 'text') ? inp.value : (parseFloat(inp.value) || 0);
+                if (inp.type === 'checkbox') {
+                    vals[id] = inp.checked ? 'yes' : 'no';
+                } else {
+                    const textFields = ['drawingNo', 'jobNo', 'fabNo', 'mainMark', 'jobName', 'gc', 'address', 'cityState', 'drawnBy', 'checkedBy', 'finishText'];
+                    if (textFields.includes(id)) {
+                        vals[id] = inp.value;
+                    } else {
+                        vals[id] = parseDimensionInput(inp.value);
+                    }
+                }
             });
             dynamicInputs.querySelectorAll('select').forEach(sel => {
                 vals[sel.id.replace('inp-', '')] = sel.value;
@@ -6617,11 +7175,19 @@ document.addEventListener('DOMContentLoaded', () => {
             if (cat === 'rail_catalog') {
                 const activeSet = balconyWizardState.tempSet || (balconyWizardState.sets ? balconyWizardState.sets[balconyWizardState.activeSetIdx] : null);
                 if (activeSet) {
-                    const panelObj = (activePanelType === 'main' || activePanelType === 'loosePost') ? activeSet.main : (activePanelType === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
+                    const panelObj = (activePanelType === 'main' || (activePanelType && activePanelType.startsWith('loose'))) ? activeSet.main : (activePanelType === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
                     if (panelObj) {
                         for (const key in panelObj) {
                             vals[key] = panelObj[key];
                         }
+                    }
+                    if (activePanelType && activePanelType.startsWith('loose')) {
+                        const currentLooseType = activePanelType;
+                        const chkInp = document.getElementById('inp-loose-post-include-bp');
+                        const incBPVal = chkInp ? (chkInp.checked ? 'yes' : 'no') : (activeSet.main[currentLooseType + '_includeBasePlates'] ?? activeSet.main.looseIncludeBasePlates ?? 'yes');
+                        vals.includeBasePlates = incBPVal;
+                        vals.looseIncludeBasePlates = incBPVal;
+                        vals[currentLooseType + '_includeBasePlates'] = incBPVal;
                     }
                 }
                 vals.originalLength = vals.length;
@@ -6645,6 +7211,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const style = vals.railStyle || 'classical';
+            const isSpecialLeftReturn = (activePanelType === 'leftReturn' && (style === 'villa' || style === 'urban' || style === 'villa_custom' || style === 'urban_custom' || style === 'villa_balcony' || style === 'urban_balcony'));
             const customSpacings = [];
             const tempMidPostsVal = vals.midPosts || 'default';
             const tempMidPostCount = parseInt(vals.midPostCount) || 0;
@@ -6656,8 +7223,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const hasBasePlates = (vals.includeBasePlates === 'yes');
-            const isMeshStyle = (style === 'urban_balcony' || style === 'villa_balcony' || style === 'urban_custom' || style === 'villa_custom');
-            const hasTopDetails = (vals.includeBasePlates === 'yes');
+            const isMeshStyle = (style === 'urban_balcony' || style === 'villa_balcony' || style === 'urban_custom' || style === 'villa_custom' || (typeof style === 'string' && (style.toLowerCase().includes('urban') || style.toLowerCase().includes('villa'))));
+            const hasTopDetails = (vals.includeBasePlates === 'yes' && !isMeshStyle);
 
             let unpaddedMinX, unpaddedMaxX, unpaddedMinY, unpaddedMaxY;
             let cadMinX, cadMaxX, cadMinY, cadMaxY;
@@ -6680,8 +7247,39 @@ document.addEventListener('DOMContentLoaded', () => {
                     const padX = 0.8;
                     let padY_min = 0.8;
                     let padY_max = 0.8;
-                    if (isLoosePost && vals.includeBasePlates === 'yes') {
-                        padY_min = 4.0; // Extra padding at the bottom for bottom dimension
+                    if (isLoosePost) {
+                        if (vals.includeBasePlates === 'yes') padY_min = 4.0;
+                        const bpc = vals.basePlateConfig || (typeof getDefaultBasePlateConfig === 'function' ? getDefaultBasePlateConfig() : {});
+                        const isWallMount = (bpc && bpc.connectionType === 'wall_mount');
+                        const style = vals.railStyle || 'classical';
+                        const props = getResolvedPanelProperties(vals, style);
+                        const postW = props ? props.postW : 1.5;
+                        
+                        let bpW = 0;
+                        if (vals.includeBasePlates === 'yes') {
+                            if (isWallMount) {
+                                bpW = (bpc.plateShape === 'qiw_standard') ? (bpc.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpc.width) || 6.0);
+                            } else {
+                                bpW = props ? props.bpW : 6.0;
+                            }
+                        }
+                        
+                        const styleLower = (style || '').toLowerCase();
+                        const isMesh = styleLower.includes('urban') || styleLower.includes('villa');
+                        const isRightPost = (activePanelType === 'looseRightPost');
+                        const looseOffX = getLoosePostOffsetX(vals, activePanelType);
+
+                        const postCenterX = looseOffX;
+                        const minElemX = Math.min(-bpW / 2, postCenterX - postW / 2 - (isMesh && isRightPost ? 1.0 : 0));
+                        const maxElemX = Math.max(bpW / 2, postCenterX + postW / 2 + (isMesh && !isRightPost ? 1.0 : 0));
+
+                        const centerAllX = (minElemX + maxElemX) / 2;
+                        const halfSpanX = Math.max((maxElemX - minElemX) / 2, 2.5);
+
+                        unpaddedMinX = centerAllX - halfSpanX;
+                        unpaddedMaxX = centerAllX + halfSpanX;
+                        cadMinX = unpaddedMinX;
+                        cadMaxX = unpaddedMaxX;
                     }
                     cadMinX -= padX;
                     cadMaxX += padX;
@@ -6699,7 +7297,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            const svgElement = svgContainer.querySelector('svg');
+            let svgElement = svgContainer.querySelector('svg');
+            if (!svgElement) {
+                renderCurrentCAD();
+                svgElement = svgContainer.querySelector('svg');
+            }
             if (!svgElement) {
                 reject("No SVG element found");
                 return;
@@ -6729,17 +7331,19 @@ document.addEventListener('DOMContentLoaded', () => {
             if (gGuide) gGuide.remove();
 
             // Strip double lines (inner HSS wall thickness lines and centerlines) for outer-only 2D representation
-            const innerSelector = [
-                '.hss-inner-line', '.inner', '[class*="inner"]', '[id*="inner"]',
-                '.center', '[class*="center"]', '[id*="center"]',
-                '.topWall', '[class*="topWall"]', '[id*="topWall"]',
-                '.botWall', '[class*="botWall"]', '[id*="botWall"]',
-                '.legLine', '[class*="legLine"]', '[id*="legLine"]',
-                '.topFlange', '[class*="topFlange"]', '[id*="topFlange"]',
-                '.botFlange', '[class*="botFlange"]', '[id*="botFlange"]',
-                '[class*="wall"]', '[id*="wall"]'
-            ].join(', ');
-            svgClone.querySelectorAll(innerSelector).forEach(el => el.remove());
+            if (!isLoosePost && !(activePanelType && activePanelType.startsWith('loose'))) {
+                const innerSelector = [
+                    '.hss-inner-line', '.inner', '[class*="inner"]', '[id*="inner"]',
+                    '.center', '[class*="center"]', '[id*="center"]',
+                    '.topWall', '[class*="topWall"]', '[id*="topWall"]',
+                    '.botWall', '[class*="botWall"]', '[id*="botWall"]',
+                    '.legLine', '[class*="legLine"]', '[id*="legLine"]',
+                    '.topFlange', '[class*="topFlange"]', '[id*="topFlange"]',
+                    '.botFlange', '[class*="botFlange"]', '[id*="botFlange"]',
+                    '[class*="wall"]', '[id*="wall"]'
+                ].join(', ');
+                svgClone.querySelectorAll(innerSelector).forEach(el => el.remove());
+            }
 
             // Parse viewBox dimensions to calculate proportional stroke-width
             let viewBoxAttr = svgClone.getAttribute('viewBox') || svgElement.getAttribute('viewBox');
@@ -6796,6 +7400,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let marginRight = 12;
             let marginTop = 22;
             let marginBottom = 22;
+            let uniqueLeaders = [];
 
             // Page boundaries
             const pageXMin = 7;
@@ -6822,7 +7427,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (isLoosePost) {
                 availW = 40;
-                availH = hasTopDetails ? 75 : 110;
+                availH = hasTopDetails ? 65 : 80;
             }
 
             // Calculate standard architectural scale dynamically
@@ -7065,6 +7670,9 @@ document.addEventListener('DOMContentLoaded', () => {
             let dimOffset3 = -28;
             let dimOffsetBottom = 16;
 
+            const styleLower = (style || 'classical').toLowerCase();
+            const isClassicStyle = (styleLower === 'classical' || styleLower.includes('classic'));
+
             let selectedScaleOverride = null;
             if (vals.customScaleOverride && vals.customScaleOverride !== 'auto') {
                 selectedScaleOverride = standardScales.find(s => s.name === vals.customScaleOverride);
@@ -7083,7 +7691,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     // 1. Check if it fits in Left-Area-Only layout (vertical padding: 59mm, horizontal: 50mm)
                     const leftAvailW = 142;
                     const leftAvailH = hasTopDetails ? ((175 - 58) - 59) : ((175 - 7) - 59);
-                    const allowLeftArea = true; // Always allowed to maximize space
+                    const allowLeftArea = (vals.length || 120) <= 96; // Only allow leftArea for short panels (<= 8ft) so main panels auto-scale to 1/2" = 1'-0"
 
                     if (allowLeftArea && w_mm <= leftAvailW && h_mm <= leftAvailH) {
                         selectedScale = s;
@@ -7093,9 +7701,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         break;
                     }
 
-                    // 2. Check if it fits in Full-Width layout with standard dimensions (vertical padding: 59mm)
-                    const fullAvailW = 233;
-                    const fullAvailH_std = (175 - upperBoundaryY) - 59;
+                    // 2. Check if it fits in Full-Width layout with standard dimensions (vertical padding: 35mm)
+                    const fullAvailW = 236; // 236mm max drawing width: 12'-16' panels auto-select 1/2"=1'-0", longer panels auto-step down
+                    const fullAvailH_std = (175 - upperBoundaryY) - 35;
 
                     if (w_mm <= fullAvailW && h_mm <= fullAvailH_std) {
                         selectedScale = s;
@@ -7105,8 +7713,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         break;
                     }
 
-                    // 3. Check if it fits in Full-Width layout with compressed dimensions (vertical padding: 40mm)
-                    const fullAvailH_comp = (175 - upperBoundaryY) - 40;
+                    // 3. Check if it fits in Full-Width layout with compressed dimensions (vertical padding: 25mm)
+                    const fullAvailH_comp = (175 - upperBoundaryY) - 25;
 
                     if (w_mm <= fullAvailW && h_mm <= fullAvailH_comp) {
                         selectedScale = s;
@@ -7154,7 +7762,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Recalculate dimensions dynamically if they exceed Y space, pushing bottom dimension line too close to the main mark label.
-            if (!isLoosePost) {
+            if (!isLoosePost && !selectedScaleOverride) {
                 let scaleIndex = standardScales.findIndex(s => s.name === selectedScale.name);
                 while (scaleIndex < standardScales.length - 1) {
                     const tempScale = standardScales[scaleIndex];
@@ -7168,52 +7776,44 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (layoutMode === 'fullWidth' || layoutMode === 'leftAligned') {
                         if (useCompressedDims) {
                             tempDimOffsetBottom = 11;
-                            tempMarginBottom = 19;
-                            tempMarginTop = 21;
+                            tempMarginBottom = 12;
+                            tempMarginTop = 14;
                         } else {
                             tempDimOffsetBottom = 16;
-                            tempMarginBottom = 26;
-                            tempMarginTop = 33;
+                            tempMarginBottom = 14;
+                            tempMarginTop = 18;
                         }
                     } else {
                         if (hasTopDetails) {
                             tempMarginTop = 12;
-                            tempMarginBottom = 16;
+                            tempMarginBottom = 14;
                         } else {
-                            tempMarginTop = 33;
-                            tempMarginBottom = 26;
+                            tempMarginTop = 18;
+                            tempMarginBottom = 14;
                         }
                     }
 
                     const styleLower = style.toLowerCase();
                     const isClassicOrExec = styleLower.includes('classic') || styleLower.includes('executive');
-                    if (isClassicOrExec) {
+                    const isMeshStyle_offset = styleLower.includes('urban') || styleLower.includes('villa');
+                    if (isClassicOrExec || isMeshStyle_offset) {
                         tempDimOffsetBottom = useCompressedDims ? 16 : 22;
                     }
 
-                    // Calculate temp pdfY
+                    // Calculate temp pdfY with maxExtra clamping to preserve drawing position safely clear of bottom title text
                     let tempPdfY;
-                    if (layoutMode === 'fullWidth') {
-                        const remainingYSpace = (175 - upperBoundaryY) - (tempDrawH + tempMarginTop + tempMarginBottom);
-                        const extraSpace = Math.max(0, remainingYSpace / 2);
-                        tempPdfY = upperBoundaryY + tempMarginTop + extraSpace;
-                    } else if (layoutMode === 'leftAligned') {
-                        const eff_upperBoundaryY = hasTopDetails ? 58 : 7;
-                        const remainingYSpace = (175 - eff_upperBoundaryY) - (tempDrawH + tempMarginTop + tempMarginBottom);
-                        const extraSpace = Math.max(0, remainingYSpace / 2);
-                        tempPdfY = eff_upperBoundaryY + tempMarginTop + extraSpace;
-                    } else {
-                        const eff_upperBoundaryY = hasTopDetails ? 58 : 7;
-                        const remainingYSpace = (175 - eff_upperBoundaryY) - (tempDrawH + tempMarginTop + tempMarginBottom);
-                        const extraSpace = Math.max(0, remainingYSpace / 2);
-                        tempPdfY = eff_upperBoundaryY + tempMarginTop + extraSpace;
-                    }
+                    const eff_upperY = Math.max(38, upperBoundaryY);
+                    const remainingYSpace = (175 - eff_upperY) - (tempDrawH + tempMarginTop + tempMarginBottom);
+                    const isRetPanel = (activePanelType === 'leftReturn' || activePanelType === 'rightReturn');
+                    const maxDimY = isRetPanel ? 158.0 : 163.0;
+                    const maxExtra = Math.max(0, maxDimY - (eff_upperY + tempMarginTop + tempDrawH + tempDimOffsetBottom));
+                    const extraSpace = Math.min(Math.max(0, remainingYSpace / 2), maxExtra);
+                    tempPdfY = eff_upperY + tempMarginTop + extraSpace;
 
                     const tempDimLineY = tempPdfY + tempDrawH + tempDimOffsetBottom;
                     
                     // If bottom dimension line is safely clear of Y = 171.5 label text, break.
-                    // We allow Y up to 164.5 so there is at least a 7.0mm gap.
-                    if (tempDimLineY <= 164.5) {
+                    if (tempDimLineY <= maxDimY) {
                         break;
                     }
 
@@ -7247,21 +7847,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     dimOffset2 = -12;
                     dimOffset3 = -17;
                     dimOffsetBottom = 11;
-                    marginTop = 21;
-                    marginBottom = 19;
+                    marginTop = 14;
+                    marginBottom = 12;
                 } else {
                     dimOffset1 = -12;
                     dimOffset2 = -20;
                     dimOffset3 = -28;
                     dimOffsetBottom = 16;
-                    marginTop = 33;
-                    marginBottom = 26;
+                    marginTop = 18;
+                    marginBottom = 14;
                 }
                 marginLeft = 25;
                 marginRight = 32;
             } else {
-                dimOffset1 = -12;
-                dimOffset2 = -20;
+                dimOffset1 = -8;
+                dimOffset2 = -18;
                 dimOffset3 = -28;
                 dimOffsetBottom = 16;
                 if (hasTopDetails) {
@@ -7275,116 +7875,145 @@ document.addEventListener('DOMContentLoaded', () => {
                 marginRight = 12;
             }
 
-            const styleLower = style.toLowerCase();
             const isClassicOrExec = styleLower.includes('classic') || styleLower.includes('executive');
-            if (isClassicOrExec) {
+            const isMeshStyle_offset = styleLower.includes('urban') || styleLower.includes('villa');
+            if (isClassicOrExec || isMeshStyle_offset) {
                 dimOffsetBottom = useCompressedDims ? 16 : 22;
             }
 
-            let pdfX;
-            if (layoutMode === 'fullWidth') {
-                pdfX = 148.5 - drawW / 2;
-            } else if (layoutMode === 'leftAligned') {
-                const isReturn = (activePanelType === 'leftReturn' || activePanelType === 'rightReturn');
-                const leftExt = 7 + (isReturn ? 28 : 5);
-                const rightExt = 196 - (isReturn ? 5 : 24);
-                const leftCenter = (leftExt + rightExt) / 2;
-                pdfX = leftCenter - drawW / 2;
-            } else {
-                pdfX = 103.0 - drawW / 2;
+            const hasLeftDetails = (vals.includeBasePlates === 'yes') || isMeshStyle;
+            const minLeftX = hasLeftDetails ? 57.0 : 8.0;
+            const maxRightX = 200.0;
+
+            const isLeftRet = (activePanelType === 'leftReturn');
+            const leftMarginNeeded = isLeftRet ? 28.0 : 12.0;
+            const rightMarginNeeded = isLeftRet ? 12.0 : 28.0;
+
+            const boundedLeft = minLeftX + leftMarginNeeded;
+            const boundedRight = maxRightX - rightMarginNeeded - drawW;
+
+            let pdfX = (297 - drawW) / 2;
+            const rightDimSpan = (useCompressedDims ? 23.0 : 33.0) + 3.0;
+            if (pdfX + drawW + rightDimSpan > 287.0) {
+                pdfX = 287.0 - drawW - rightDimSpan;
             }
-            if (activePanelType === 'leftReturn' || activePanelType === 'rightReturn') {
-                pdfX = Math.max(36.0, pdfX);
+            if (pdfX < 21.0) {
+                pdfX = 21.0;
             }
 
             let pdfY;
-            if (layoutMode === 'fullWidth') {
-                const remainingYSpace = (175 - upperBoundaryY) - (drawH + marginTop + marginBottom);
-                const extraSpace = Math.max(0, remainingYSpace / 2);
-                pdfY = upperBoundaryY + marginTop + extraSpace;
-            } else if (layoutMode === 'leftAligned') {
-                const eff_upperBoundaryY = hasTopDetails ? 58 : 7;
-                const remainingYSpace = (175 - eff_upperBoundaryY) - (drawH + marginTop + marginBottom);
-                const extraSpace = Math.max(0, remainingYSpace / 2);
-                pdfY = eff_upperBoundaryY + marginTop + extraSpace;
+            const eff_upperY = Math.max(38, upperBoundaryY);
+            if (isLoosePost) {
+                const availYSpace = (152.0 - eff_upperY) - drawH;
+                pdfY = eff_upperY + Math.max(8, availYSpace / 2);
             } else {
-                if (hasTopDetails) {
-                    const remainingYSpace = (175 - 58) - (drawH + marginTop + marginBottom);
-                    const extraSpace = Math.max(0, remainingYSpace / 2);
-                    pdfY = 58 + marginTop + extraSpace;
-                } else {
-                    const remainingYSpace = (175 - 7) - (drawH + marginTop + marginBottom);
-                    const extraSpace = Math.max(0, remainingYSpace / 2);
-                    pdfY = 7 + marginTop + extraSpace;
-                }
+                const remainingYSpace = (175 - eff_upperY) - (drawH + marginTop + marginBottom);
+                const isRetPanel = (activePanelType === 'leftReturn' || activePanelType === 'rightReturn');
+                const maxDimY = isRetPanel ? 158.0 : 163.0;
+                const maxExtra = Math.max(0, maxDimY - (eff_upperY + marginTop + drawH + dimOffsetBottom));
+                const extraSpace = Math.min(Math.max(0, remainingYSpace / 2), maxExtra);
+                pdfY = eff_upperY + marginTop + extraSpace;
             }
 
-            // 0.28mm line thickness on the PDF page translates to viewBox units as follows:
-            const targetThicknessPdf = 0.28; 
-            const lineThickness = targetThicknessPdf * (vbWidth / drawW);
+            // --- MAIN PANELS AND RETURN PANELS ARE LOCKED ---
+            // DO NOT MAKE ANY CHANGES TO MAIN PANELS OR RETURN PANELS RENDERING OR STROKE LOGIC UNTIL EXPLICITLY REQUESTED.
+            const targetCanvasW = (svgRatio >= 1.0) ? 3200.0 : Math.max(100.0, Math.round(3200.0 * svgRatio));
+            const isMainPanelSheet = (activePanelType === 'main' || (typeof panelType !== 'undefined' && panelType === 'main'));
+            const isLoosePostSheet = (isLoosePost || (activePanelType && activePanelType.startsWith('loose')) || (typeof panelType !== 'undefined' && panelType && panelType.startsWith('loose')));
+            const isReturnPanelSheet = (activePanelType === 'leftReturn' || activePanelType === 'rightReturn' || (typeof panelType !== 'undefined' && (panelType === 'leftReturn' || panelType === 'rightReturn')));
 
-        // Ensure absolutely high-contrast black lines and white backgrounds (remove all blue and cyan colors)
+            let lineThickness, innerDetailThickness, holeThickness;
+            if (isMainPanelSheet) {
+                // Locked Main Panel stroke formula - preserved exactly
+                lineThickness = (60.0 / targetCanvasW) * vbWidth;
+                innerDetailThickness = (50.0 / targetCanvasW) * vbWidth;
+                holeThickness = (25.0 / targetCanvasW) * vbWidth;
+            } else if (isReturnPanelSheet) {
+                // Balanced Return Panel stroke formula - Crisp, solid pitch-black matching Main Panel
+                lineThickness = 6.0;
+                innerDetailThickness = 5.0;
+                holeThickness = 3.0;
+            } else if (isLoosePostSheet) {
+                // Loose Post stroke formula - Matches dashed centerline (0.22mm PDF vector stroke)
+                const postDrawW = drawW || 120.0;
+                lineThickness = vbWidth * (0.22 / postDrawW);
+                innerDetailThickness = vbWidth * (0.18 / postDrawW);
+                holeThickness = vbWidth * (0.12 / postDrawW);
+            } else {
+                lineThickness = 6.0;
+                innerDetailThickness = 5.0;
+                holeThickness = 3.0;
+            }
+
+        // Ensure valid SVG namespace for clean canvas rendering
+        svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+        // Remove any embedded CSS <style> tags that force dimmed/faint opacities or gray colors
+        svgClone.querySelectorAll('style').forEach(s => s.remove());
+
+        // Ensure absolutely high-contrast pitch-black lines across ALL elements, groups, posts, and return panels
         svgClone.querySelectorAll('*').forEach(el => {
             if (!el) return;
-            // Force stroke to black and fill to none for shape elements
+
+            // Strip inline style and class attributes that contain dimmed opacity or gray stroke rules (e.g. inactive-panel)
+            if (el.removeAttribute) {
+                el.removeAttribute('style');
+                el.removeAttribute('class');
+            }
+
+            // Force 100% solid opacity and pitch black stroke on all container groups and shapes
+            el.setAttribute('opacity', '1');
+            el.setAttribute('stroke-opacity', '1');
+            el.setAttribute('stroke', '#000000');
+
             const tag = el.tagName ? el.tagName.toLowerCase() : '';
             if (['path', 'rect', 'circle', 'line', 'polygon'].includes(tag)) {
-                el.setAttribute('stroke', '#000000');
-                const isSolidPlate = el.closest && (
-                    el.closest('.kickPlate') || el.closest('[id*="kickPlate"]') || el.closest('g[id$="kickPlate"]') ||
-                    el.closest('.panicBarPlate') || el.closest('[id*="panicBarPlate"]') || el.closest('g[id$="panicBarPlate"]') ||
-                    el.closest('[id*="FB"]') || el.closest('[id*="fb"]') || el.closest('g[id$="meshFrame"]')
-                );
+                // Collect IDs and classes from element and all parent container groups
+                let combinedIdClass = '';
+                let current = el;
+                while (current && current !== svgClone) {
+                    const cId = current.getAttribute ? (current.getAttribute('id') || '') : '';
+                    const cCl = current.getAttribute ? (current.getAttribute('class') || '') : '';
+                    combinedIdClass += ' ' + cId + ' ' + cCl;
+                    current = current.parentElement;
+                }
+                const combinedLower = combinedIdClass.toLowerCase();
+                const isBpHole = combinedLower.includes('bphole');
+
+                // Strip any dotted dash patterns from post inner lines or tube walls
+                if (!isBpHole && el.removeAttribute) {
+                    el.removeAttribute('stroke-dasharray');
+                    el.removeAttribute('stroke-dashoffset');
+                }
+
+                const isSolidPlate = combinedLower.includes('kickplate') || combinedLower.includes('panicbarplate') ||
+                                      combinedLower.includes('fb') || combinedLower.includes('meshframe');
                 const fillVal = isSolidPlate ? '#ffffff' : 'none';
                 el.setAttribute('fill', fillVal);
                 if (isSolidPlate) el.setAttribute('fill-opacity', '1');
-                if (el.style) {
-                    el.style.stroke = '#000000';
-                    el.style.fill = fillVal;
-                    if (isSolidPlate) el.style.fillOpacity = '1';
+
+                let thickness = isMainPanelSheet ? lineThickness : (isReturnPanelSheet ? 6.0 : (isLoosePostSheet ? lineThickness : 6.0));
+                const isInnerDetail = combinedLower.includes('picket') || combinedLower.includes('inner') ||
+                                      combinedLower.includes('hss-inner-line') || combinedLower.includes('meshpanel') ||
+                                      combinedLower.includes('mesh_panel') || combinedLower.includes('wwm') ||
+                                      combinedLower.includes('wave');
+                
+                if (isInnerDetail) {
+                    thickness = isMainPanelSheet ? innerDetailThickness : (isReturnPanelSheet ? 5.0 : (isLoosePostSheet ? innerDetailThickness : 5.0));
+                }
+                if (isBpHole) {
+                    el.setAttribute('stroke-dasharray', '2,2');
+                    el.setAttribute('opacity', '0.7');
+                    thickness = isMainPanelSheet ? holeThickness : (isReturnPanelSheet ? 3.0 : (isLoosePostSheet ? holeThickness : 3.0));
+                }
+                
+                if (el.setAttribute) {
+                    el.setAttribute('stroke-width', thickness.toString());
                 }
             } else if (tag === 'text') {
                 el.setAttribute('fill', '#000000');
                 el.setAttribute('stroke', 'none');
-                if (el.style) {
-                    el.style.fill = '#000000';
-                    el.style.stroke = 'none';
-                }
-            }
-        });
-
-        // Set the calculated thickness on all drawing paths to ensure clean, readable prints.
-        // Pickets are drawn slightly thinner (0.22mm on PDF page) for visual contrast as requested by the user.
-        svgClone.querySelectorAll('path, rect, circle, line, polygon').forEach(el => {
-            if (!el) return;
-            const id = el.getAttribute('id') || '';
-            const className = el.getAttribute('class') || '';
-            
-            let thickness = lineThickness;
-            const idLower = id.toLowerCase();
-            const classLower = className.toLowerCase();
-            const isInnerDetail = idLower.includes('picket') || classLower.includes('picket') ||
-                                  idLower.includes('meshpanel') || classLower.includes('meshpanel') ||
-                                  idLower.includes('mesh_panel') || classLower.includes('mesh_panel') ||
-                                  idLower.includes('wwm') || classLower.includes('wwm') ||
-                                  idLower.includes('wave') || classLower.includes('wave');
-            
-            if (isInnerDetail) {
-                thickness = lineThickness * 0.55; // 0.22mm / 0.40mm = 0.55
-            }
-            
-            const isBpHole = idLower.includes('bphole') || classLower.includes('bphole');
-            if (isBpHole) {
-                el.setAttribute('stroke-dasharray', '2,2');
-                el.setAttribute('opacity', '0.6');
-                thickness = lineThickness * 0.5; // Thin lines for holes
-            }
-            
-            if (el.setAttribute) {
-                el.setAttribute('stroke-width', thickness.toString());
-            }
-            if (el.style) {
-                el.style.strokeWidth = thickness.toString();
+                el.setAttribute('opacity', '1');
             }
         });
         
@@ -7403,22 +8032,24 @@ document.addEventListener('DOMContentLoaded', () => {
         svgClone.setAttribute('viewBox', `${vbMinX} ${vbMinY} ${vbWidth} ${vbHeight}`);
         svgRatio = vbWidth / vbHeight;
 
-        // Set the width and height of the SVG clone to match its intrinsic dimensions.
-        svgClone.setAttribute('width', vbWidth.toFixed(2) + 'px');
-        svgClone.setAttribute('height', vbHeight.toFixed(2) + 'px');
+        // Set high-resolution width and height on SVG clone so browser rasterizes at HD resolution (min 800px width)
+        const hdSvgW = (svgRatio >= 1.0) ? 3200 : Math.max(800, Math.round(3200 * svgRatio));
+        const hdSvgH = (svgRatio >= 1.0) ? Math.round(3200 / svgRatio) : 3200;
+        svgClone.setAttribute('width', hdSvgW + 'px');
+        svgClone.setAttribute('height', hdSvgH + 'px');
 
         const svgData = new XMLSerializer().serializeToString(svgClone);
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         const img = new Image();
 
-        // Set canvas dimensions at a high resolution with matching aspect ratio, ensuring browser canvas size limits are not exceeded
+        // Set canvas dimensions at a high resolution with matching aspect ratio (min 800px width)
         if (svgRatio >= 1.0) {
-            canvas.width = 2000;
-            canvas.height = Math.round(2000 / svgRatio);
+            canvas.width = 3200;
+            canvas.height = Math.round(3200 / svgRatio);
         } else {
-            canvas.height = 2000;
-            canvas.width = Math.round(2000 * svgRatio);
+            canvas.height = 3200;
+            canvas.width = Math.max(800, Math.round(3200 * svgRatio));
         }
 
         // Bypassing chrome incognito / sandboxing restrictions on blob URLs via Base64 data URI
@@ -7433,9 +8064,29 @@ document.addEventListener('DOMContentLoaded', () => {
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
                     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
+                    // High-contrast pixel binarization: convert ALL non-white pixels (< 252) into solid 100% pitch-black
+                    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const d = imgData.data;
+                    for (let i = 0; i < d.length; i += 4) {
+                        // If pixel is not pure white background (brightness < 252)
+                        if (d[i] < 252 || d[i + 1] < 252 || d[i + 2] < 252) {
+                            d[i] = 0;       // Red = 0 (Solid Pitch Black)
+                            d[i + 1] = 0;   // Green = 0
+                            d[i + 2] = 0;   // Blue = 0
+                            d[i + 3] = 255; // 100% Opaque
+                        } else {
+                            d[i] = 255;     // Pure White Background
+                            d[i + 1] = 255;
+                            d[i + 2] = 255;
+                            d[i + 3] = 255;
+                        }
+                    }
+                    ctx.putImageData(imgData, 0, 0);
+
                     const pngData = canvas.toDataURL('image/png');
-                    
-                    doc.addImage(pngData, 'PNG', pdfX, pdfY, drawW, drawH);
+                    if (!isLoosePostSheet) {
+                        doc.addImage(pngData, 'PNG', pdfX, pdfY, drawW, drawH);
+                    }
             
             // --- DRAW BORDERS ---
             doc.setDrawColor(0, 0, 0);
@@ -7483,6 +8134,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let countLeftPost = 0, countRightPost = 0;
             let midPostMark = null, picketMark = null, kpMark = null, bpMark = null;
             let meshFbMark = null, meshPanelMark = null, pbpMark = null;
+            let hfbMarks = {}, vertFbMark = null, meshPanelMarks = {};
             let leftPostW = 0, rightPostW = 0, midPostW = 0, topH = 0, botH = 0, midH = 0, pickW = 0;
             let midRailGap = 12.0, kickPlateH = 12.0, midPostCount = 0;
             let noPosts = false, numSpans = 1, numPosts = 0, actualPostSpacing = 0, clearWidth = 0, numPickets = 0, finalPicketsCount = 0, totalPickets = 0;
@@ -7730,17 +8382,60 @@ document.addEventListener('DOMContentLoaded', () => {
                 countLeftPost = hasLeft ? 1 : 0;
                 countRightPost = hasRight ? 1 : 0;
 
-                topMark = getMark(topRailType !== 'none');
-                botMark = getMark(botRailType !== 'none');
-                midMark = getMark(midRailType !== 'none');
+                let charCode = 97; // 'a'
+                const getMark = (isPresent) => {
+                    if (!isPresent) return null;
+                    const m = String.fromCharCode(charCode) + (cat === 'rail_catalog' ? drawingNo : cleanDrawingNo);
+                    charCode++;
+                    return m;
+                };
+
+                topMark = mainMarkCode; // Top Rail is always Main Mark (e.g. 1FB)
+                
+                // Get runner spans and marks
+                const tempSpansForMarking = resolveRailMarksAndSpans(vals, drawingNo, cat, style, postW);
+                const uniqueRunnerMarks = new Set();
+                if (tempSpansForMarking.bottomSegments) {
+                    tempSpansForMarking.bottomSegments.forEach(seg => uniqueRunnerMarks.add(seg.mark));
+                }
+                if (tempSpansForMarking.midSegments) {
+                    tempSpansForMarking.midSegments.forEach(seg => uniqueRunnerMarks.add(seg.mark));
+                }
+                if (uniqueRunnerMarks.size > 0) {
+                    charCode = 97 + uniqueRunnerMarks.size; // Next letter after runners (e.g. 'c' if 2 unique runner lengths)
+                }
+
+                botMark = (tempSpansForMarking.bottomSegments && tempSpansForMarking.bottomSegments[0]) ? tempSpansForMarking.bottomSegments[0].mark : getMark(botRailType !== 'none');
+                midMark = (tempSpansForMarking.midSegments && tempSpansForMarking.midSegments[0]) ? tempSpansForMarking.midSegments[0].mark : getMark(midRailType !== 'none');
+
                 leftMark = getMark(countLeftPost > 0 && postType !== 'none');
                 rightMark = (countRightPost > 0 && postType !== 'none') ? (leftMark ? leftMark : getMark(true)) : null;
                 midPostMark = getMark(vals.midPosts !== 'none' && midPostCount > 0 && postType !== 'none');
                 picketMark = getMark(picketType !== 'none' && finalPicketsCount > 0);
-                const isMeshStyle = (style === 'urban_balcony' || style === 'villa_balcony' || style === 'urban_custom' || style === 'villa_custom');
-                meshFbMark = getMark(isMeshStyle);
-                meshPanelMark = getMark(isMeshStyle);
-                bpMark = getMark(includeBasePlates === 'yes');
+                const isMeshStyle = (style === 'urban_balcony' || style === 'villa_balcony' || style === 'urban_custom' || style === 'villa_custom' || (typeof style === 'string' && (style.toLowerCase().includes('urban') || style.toLowerCase().includes('villa'))));
+                hfbMarks = {};
+                vertFbMark = null;
+                meshPanelMarks = {};
+                if (isMeshStyle) {
+                    const tempSpans = resolveRailMarksAndSpans(vals, drawingNo, cat, style, postW);
+                    const spanLengths = [];
+                    tempSpans.bottomSegments.forEach(seg => {
+                        if (!spanLengths.includes(seg.len)) {
+                            spanLengths.push(seg.len);
+                        }
+                    });
+                    spanLengths.forEach(len => {
+                        hfbMarks[len] = getMark(true);
+                    });
+                    vertFbMark = getMark(true);
+                    spanLengths.forEach(len => {
+                        meshPanelMarks[len] = getMark(true);
+                    });
+                    meshFbMark = Object.values(hfbMarks)[0] || null;
+                    meshPanelMark = Object.values(meshPanelMarks)[0] || null;
+                }
+                const bpc = vals.basePlateConfig || getDefaultBasePlateConfig();
+                bpMark = (includeBasePlates === 'yes') ? resolveBasePlatePieceMark(bpc) : null;
             } else if (cat === 'rails_gates') {
                 leftPostW = getPicketDimension(vals.leftPostType, vals.leftPostSize, vals.leftPostW);
                 rightPostW = getPicketDimension(vals.rightPostType, vals.rightPostSize, vals.rightPostW);
@@ -7834,9 +8529,6 @@ document.addEventListener('DOMContentLoaded', () => {
                  let midRailGap = (style === 'classical') ? 0 : ((style === 'executive' || style === 'villa_balcony') ? 3.0 : (vals.midRailGap !== undefined ? vals.midRailGap : 12.0));
                  let midH = (style === 'classical') ? 0 : ((style === 'executive' || style === 'villa_balcony') ? 1.5 : getProfileDimension(vals.midRailType, vals.midRailSize, vals.midRailH || 1.5));
                    // --- HORIZONTAL DIMENSIONS (TOP) ---
-                  // Tier 1 (Overall Length)
-                  drawCadDimension(0, pHeight, vals.length, pHeight, dimOffset3, formatFraction(vals.length), "middle", "dim-width");
-  
                   // Post Centers List
                   const postCenters = [];
                   postCenters.push((vals.leftPost === 'yes') ? (postW / 2) : 0);
@@ -7847,12 +8539,19 @@ document.addEventListener('DOMContentLoaded', () => {
                       });
                   }
                  postCenters.push((vals.rightPost === 'yes') ? (vals.length - postW / 2) : vals.length);
- 
+                 const hasAnyPost = (vals.leftPost === 'yes') || (vals.rightPost === 'yes') || (vals.midPosts !== 'none' && midPostCount > 0);
+
+                 // Tier 1 / Tier 2 Overall Total Length Dimension
+                 const topOverallDimOffset = hasAnyPost ? dimOffset3 : dimOffset2;
+                 drawCadDimension(0, pHeight, vals.length, pHeight, topOverallDimOffset, formatFraction(vals.length), "middle", "dim-width");
+
                  // Tier 2 (Spans)
-                 for (let i = 0; i < postCenters.length - 1; i++) {
-                     const c1 = postCenters[i];
-                     const c2 = postCenters[i+1];
-                     drawCadDimension(c1, pHeight, c2, pHeight, dimOffset2, formatFraction(c2 - c1), "middle", `dim-span-${i}`);
+                 if (hasAnyPost) {
+                     for (let i = 0; i < postCenters.length - 1; i++) {
+                         const c1 = postCenters[i];
+                         const c2 = postCenters[i+1];
+                         drawCadDimension(c1, pHeight, c2, pHeight, dimOffset2, formatFraction(c2 - c1), "middle", `dim-span-${i}`);
+                     }
                  }
  
                  // Tier 3 (Picket Patterns)
@@ -7907,7 +8606,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                   const ry = cx * sinS + cy * cosS;
                                   const midPdf = cadToPdf(rx, ry);
                                   const labelDeltaY = annotationOffsets[`dim-picket-text-${i}`] !== undefined ? annotationOffsets[`dim-picket-text-${i}`] : 0;
-                                  const labelY = midPdf[1] + (dimOffset1 * 0.40) + labelDeltaY * pdfScale;
+                                  const labelY = midPdf[1] + (dimOffset1 * 0.35) + labelDeltaY * pdfScale;
                                   
                                   doc.setFont('helvetica', 'normal');
                                   doc.setFontSize(Math.min(2.8, 2.8 * (customDimFontSize / 12.0)));
@@ -7956,58 +8655,75 @@ document.addEventListener('DOMContentLoaded', () => {
                     clearSpans.push({ start: lastX, end: vals.length });
                 }
 
-                clearSpans.forEach((span, idx) => {
-                    drawCadDimension(span.start, 0, span.end, 0, dimOffsetBottom, formatFraction(span.end - span.start), "middle", `dim-clear-${idx}`);
-                });
+                const bpc_dim = vals.basePlateConfig || {};
+                const isWall_dim = (vals.includeBasePlates === 'yes' && bpc_dim.connectionType === 'wall_mount');
+                const wallOffset_dim = isWall_dim ? (parseFloat(bpc_dim.wallMountOffset) || 1.0) : 0;
+                const bpThick = getProfileDimension('plate', vals.basePlateSize, vals.basePlateT || 0.5);
+                const postYStart = 0;
+
+                if (hasAnyPost) {
+                    clearSpans.forEach((span, idx) => {
+                        drawCadDimension(span.start, postYStart, span.end, postYStart, dimOffsetBottom, formatFraction(span.end - span.start), "middle", `dim-clear-${idx}`);
+                    });
+                }
 
                 // --- VERTICAL DIMENSIONS (LEFT for Left Return, RIGHT for Main/Right Return) ---
+                const vertDimX = isSpecialLeftReturn ? 0 : vals.length;
+                const vertDimMult = isSpecialLeftReturn ? -1 : 1;
+
                 // Vertical dimension for the top gap on the right side
                 const hasMid = (style === 'executive' || style === 'villa_balcony' || style === 'villa_custom' || style === 'executive_custom' || (style.includes('custom') && vals.midRailType !== 'none'));
                 const isMesh = (style === 'urban_balcony' || style === 'villa_balcony' || style === 'urban_custom' || style === 'villa_custom');
                 if (hasMid) {
                     const yStart = pHeight - topH - midRailGap;
                     const yEnd = pHeight - topH;
-                    drawCadDimension(vals.length, yStart, vals.length, yEnd, 8, formatFraction(midRailGap), "middle", "dim-vert-right-top-gap");
+                    drawCadDimension(vertDimX, yStart, vertDimX, yEnd, 8 * vertDimMult, formatFraction(midRailGap), "middle", "dim-vert-right-top-gap", vertDimX);
 
                     // Picket/Mesh Height
                     const yStart_picket = botY + botH;
                     const yEnd_picket = pHeight - topH - midRailGap - midH;
                     const picketH = yEnd_picket - yStart_picket;
                     const dimId = isMesh ? "dim-vert-right-mesh-height" : "dim-vert-right-picket-height";
-                    drawCadDimension(vals.length, yStart_picket, vals.length, yEnd_picket, 8, formatFraction(picketH), "middle", dimId);
+                    drawCadDimension(vertDimX, yStart_picket, vertDimX, yEnd_picket, 8 * vertDimMult, formatFraction(picketH), "middle", dimId, vertDimX);
 
                     // Fence Height (Column 2)
-                    drawCadDimension(vals.length, botY, vals.length, pHeight, 16, formatFraction(fHeight), "middle", "dim-vert-right-fence-height");
+                    drawCadDimension(vertDimX, botY, vertDimX, pHeight, 16 * vertDimMult, formatFraction(fHeight), "middle", "dim-vert-right-fence-height", vertDimX);
                 } else {
                     // Picket/Mesh Height (Column 1 when no mid rail)
                     const yStart_picket = botY + botH;
                     const yEnd_picket = pHeight - topH;
                     const picketH = yEnd_picket - yStart_picket;
                     const dimId = isMesh ? "dim-vert-right-mesh-height" : "dim-vert-right-picket-height";
-                    drawCadDimension(vals.length, yStart_picket, vals.length, yEnd_picket, 8, formatFraction(picketH), "middle", dimId);
+                    drawCadDimension(vertDimX, yStart_picket, vertDimX, yEnd_picket, 8 * vertDimMult, formatFraction(picketH), "middle", dimId, vertDimX);
 
                     // Fence Height (Column 2)
-                    drawCadDimension(vals.length, botY, vals.length, pHeight, 16, formatFraction(fHeight), "middle", "dim-vert-right-fence-height");
+                    drawCadDimension(vertDimX, botY, vertDimX, pHeight, 16 * vertDimMult, formatFraction(fHeight), "middle", "dim-vert-right-fence-height", vertDimX);
                 }
 
-                let firstAvailPostX = vals.length;
-                if (typeof allPosts !== 'undefined' && allPosts.length > 0) {
+                let firstAvailPostX = isSpecialLeftReturn ? 0 : vals.length;
+                if (!isSpecialLeftReturn && typeof allPosts !== 'undefined' && allPosts.length > 0) {
                     const lastPost = allPosts[allPosts.length - 1];
                     firstAvailPostX = (lastPost.startX + lastPost.endX) / 2;
+                } else if (isSpecialLeftReturn && typeof allPosts !== 'undefined' && allPosts.length > 0) {
+                    const firstPost = allPosts[0];
+                    firstAvailPostX = (firstPost.startX + firstPost.endX) / 2;
                 }
 
-                // Column 2: Bottom Gap (bottom of runner to bottom of post) in all styles
-                if (botY > 0.01) {
-                    drawCadDimension(firstAvailPostX, 0, vals.length, botY, 16, formatFraction(botY), "middle", "dim-vert-right-bot-gap", vals.length);
-                }
+                // Post-dependent vertical dimensions (only draw if at least one post exists)
+                if (hasAnyPost) {
+                    // Column 2: Bottom Gap (bottom of runner to bottom of post) in all styles
+                    if (botY > postYStart + 0.01) {
+                        drawCadDimension(firstAvailPostX, postYStart, vertDimX, botY, 16 * vertDimMult, formatFraction(botY - postYStart), "middle", "dim-vert-right-bot-gap", vertDimX);
+                    }
 
-                // Column 3: Overall Post Height (bottom of post to top of top runner) in all styles
-                drawCadDimension(firstAvailPostX, 0, vals.length, pHeight, 24, formatFraction(pHeight), "middle", "dim-vert-right-overall-height", vals.length);
+                    // Column 3: Overall Post Height (bottom of post to top of top runner) in all styles
+                    drawCadDimension(firstAvailPostX, postYStart, vertDimX, pHeight, 24 * vertDimMult, formatFraction(pHeight - postYStart), "middle", "dim-vert-right-overall-height", vertDimX);
 
-                if (vals.includeBasePlates === 'yes') {
-                    const bpThick = getProfileDimension('plate', vals.basePlateSize, vals.basePlateT || 0.5);
-                    const overallBP = pHeight + bpThick;
-                    drawCadDimension(firstAvailPostX, -bpThick, vals.length, pHeight, 32, formatFraction(overallBP), "middle", "dim-vert-right-overall-bp", vals.length);
+                    if (vals.includeBasePlates === 'yes' && !isWall_dim) {
+                        const bpBottomY = -bpThick;
+                        const overallBP = pHeight - bpBottomY;
+                        drawCadDimension(firstAvailPostX, bpBottomY, vertDimX, pHeight, 32 * vertDimMult, formatFraction(overallBP), "middle", "dim-vert-right-overall-bp", vertDimX);
+                    }
                 }
 
                 // --- VERTICAL DIMENSIONS (LEFT) ---
@@ -8020,9 +8736,16 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (isLoosePost) {
                 const style = vals.railStyle || 'classical';
                 const props = getResolvedPanelProperties(vals, style);
-                const pHeight = props ? props.pHeight : 45.75;
+                const extraLen = parseFloat(vals.looseExtraLen) || parseFloat(document.getElementById('inp-loose-post-extra-len')?.value) || 0;
+                const looseOffX = getLoosePostOffsetX(vals, activePanelType);
+                const pHeight = (props ? props.pHeight : 45.75) + extraLen;
                 const postW = props ? props.postW : 1.5;
-                const includeBasePlates = props ? props.includeBasePlates : 'no';
+                const currentLooseType = (activePanelType && activePanelType.startsWith('loose')) ? activePanelType : 'loosePost';
+                const includeBasePlates = (vals[currentLooseType + '_includeBasePlates'] !== undefined)
+                    ? vals[currentLooseType + '_includeBasePlates']
+                    : (vals.looseIncludeBasePlates !== undefined
+                        ? vals.looseIncludeBasePlates
+                        : (props ? props.includeBasePlates : 'yes'));
                 const bpW = props ? props.bpW : 6.0;
                 const bpH = props ? props.bpH : 0.5;
 
@@ -8039,6 +8762,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 let actualFbHeight = 0;
 
                 if (isMeshStyle) {
+                    const basePHeight = props ? props.pHeight : 45.75;
                     const topRailH = props ? props.topRailH : 1.5;
                     const botRailH = props ? props.botRailH : 1.5;
                     const fenceHeight = props ? props.fHeight : 36.0;
@@ -8046,9 +8770,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     const midRailGap = props ? props.midRailGap : 12.0;
                     const midRailH = props ? props.midRailH : 1.5;
                     const hasMid = (style === 'villa_balcony' || (style === 'villa_custom' && midRailType !== 'none'));
-                    yEnd = hasMid ? (pHeight - topRailH - midRailGap - midRailH) : (pHeight - topRailH);
+                    yEnd = hasMid ? (basePHeight - topRailH - midRailGap - midRailH) : (basePHeight - topRailH);
                     
-                    const bY = pHeight - fenceHeight;
+                    const bY = basePHeight - fenceHeight;
                     yStart = bY + botRailH;
                     actualFbHeight = yEnd - yStart - 2.0;
                     if (actualFbHeight > 0) {
@@ -8058,58 +8782,113 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-                const bpRightX = includeBasePlates === 'yes' ? (postW / 2 + bpW / 2) : postW;
-                const overallH = pHeight + (includeBasePlates === 'yes' ? bpH : 0);
+                const bpc = vals.basePlateConfig || (typeof getDefaultBasePlateConfig === 'function' ? getDefaultBasePlateConfig() : {});
+                const isWallMount = (includeBasePlates === 'yes' && bpc.connectionType === 'wall_mount');
+                const wallPlateW = (bpc.plateShape === 'qiw_standard') ? (bpc.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpc.width) || 6.0);
+                const effectiveBpW = includeBasePlates === 'yes' ? (isWallMount ? wallPlateW : bpW) : 0;
 
-                // Set target offsets relative to bpRightX
-                const desiredLine1Offset = 16;
-                const desiredLine2Offset = hasFlatBar ? 24 : 16;
-                const desiredLine3Offset = hasFlatBar ? 32 : 24;
+                const bpRightX = includeBasePlates === 'yes' ? (effectiveBpW / 2) : (looseOffX + postW / 2);
+                const bpLeftX = includeBasePlates === 'yes' ? (-effectiveBpW / 2) : (looseOffX - postW / 2);
+                const postLeftX = looseOffX - postW / 2;
+                const postRightX = looseOffX + postW / 2;
+                const overallH = pHeight + (includeBasePlates === 'yes' && !isWallMount ? bpH : 0);
 
-                // Line 1: Flat bar gap and flat bar length (if flat bar is present)
+                const isRightPost = activePanelType === 'looseRightPost';
+                const sideMult = isRightPost ? -1 : 1;
+
+                const fbRightX = hasFlatBar ? (isRightPost ? postLeftX : postRightX + 1.0) : postRightX;
+                const fbLeftX = hasFlatBar ? (isRightPost ? postLeftX - 1.0 : postRightX) : postLeftX;
+                const refDimX = isRightPost ? Math.min(postLeftX, bpLeftX, fbLeftX) : Math.max(postRightX, bpRightX, fbRightX);
+                const dimOff1 = 14 * sideMult;
+                const dimOff2 = (hasFlatBar ? 26 : 24) * sideMult;
+                const dimOff3 = (hasFlatBar ? 36 : 24) * sideMult;
+
                 if (hasFlatBar) {
-                    const fx1 = postW + 1.0; // Flat bar right edge
-                    const passOffset = desiredLine1Offset + (bpRightX - fx1) * pdfScale;
-                    drawCadDimension(fx1, topOfFb, fx1, pHeight, passOffset, formatFraction(fbGap), "middle", "dim-height-fb-gap-right");
-                    drawCadDimension(fx1, yStart + 1.0, fx1, yEnd - 1.0, passOffset, formatFeetInches(actualFbHeight), "middle", "dim-height-fb-len-right");
-                }
+                    // Line 1: Top gap (2 1/2") and Flat Bar height (3'-0")
+                    drawCadDimension(refDimX, topOfFb, refDimX, pHeight, dimOff1, formatFraction(fbGap), "middle", "dim-fb-gap");
+                    drawCadDimension(refDimX, yStart + 1.0, refDimX, topOfFb, dimOff1, formatFeetInches(actualFbHeight), "middle", "dim-fb-height");
 
-                // Line 2: Top of post to bottom of post (or top of base plate if base plate is present)
-                const fx2 = postW; // Post right edge
-                const passOffset2 = desiredLine2Offset + (bpRightX - fx2) * pdfScale;
-                if (includeBasePlates === 'yes') {
-                    drawCadDimension(bpRightX, 0, fx2, pHeight, desiredLine2Offset, formatFeetInches(pHeight), "middle", "dim-height-post-right", bpRightX);
+                    // Line 2: Bottom of post shaft (0) to top of post (pHeight) -> e.g. 3'-9 3/4"
+                    drawCadDimension(refDimX, 0, refDimX, pHeight, dimOff2, formatFeetInches(pHeight), "middle", "dim-height-post-" + (isRightPost ? "left" : "right"));
+
+                    // Line 3: Overall height (bottom of base plate to top of post) - ONLY FOR STANDARD BASE PLATE, NOT WALL MOUNT!
+                    if (includeBasePlates === 'yes' && !isWallMount) {
+                        drawCadDimension(refDimX, -bpH, refDimX, pHeight, dimOff3, formatFeetInches(overallH), "middle", "dim-height-overall-" + (isRightPost ? "left" : "right"));
+                    }
+                } else if (includeBasePlates === 'yes' && !isWallMount) {
+                    // Standard Base Plate: Post height (0 to pHeight) & Overall height (-bpH to pHeight)
+                    drawCadDimension(refDimX, 0, refDimX, pHeight, dimOff1, formatFeetInches(pHeight), "middle", "dim-height-post-" + (isRightPost ? "left" : "right"));
+                    drawCadDimension(refDimX, -bpH, refDimX, pHeight, dimOff2, formatFeetInches(overallH), "middle", "dim-height-overall-" + (isRightPost ? "left" : "right"));
                 } else {
-                    drawCadDimension(fx2, 0, fx2, pHeight, passOffset2, formatFeetInches(pHeight), "middle", "dim-height-post-right");
-                }
-
-                // Line 3: Top of post to bottom of base plate (if base plate is present)
-                if (includeBasePlates === 'yes') {
-                    const fx3 = bpRightX; // Base plate right edge
-                    const passOffset3 = desiredLine3Offset + (bpRightX - fx3) * pdfScale;
-                    drawCadDimension(fx3, -bpH, fx3, pHeight, passOffset3, formatFeetInches(overallH), "middle", "dim-height-overall-right");
+                    // Wall Mount or No Base Plate: Post height only (0 to pHeight)
+                    drawCadDimension(refDimX, 0, refDimX, pHeight, dimOff1, formatFeetInches(pHeight), "middle", "dim-height-post-" + (isRightPost ? "left" : "right"));
                 }
                 
                 // Horizontal Stacked Dimensions (Top & Bottom)
+                // Post width at the top (1 1/2")
+                drawCadDimension(postLeftX, pHeight, postRightX, pHeight, -10, formatFraction(postW), "middle", "dim-width-post");
+                // Base plate width at the bottom (5" or 6")
                 if (includeBasePlates === 'yes') {
-                    // Post width at the top
-                    drawCadDimension(0, pHeight, postW, pHeight, -(distToTopMargin + 8), formatFraction(postW), "middle", "dim-width-post");
-                    // Plate width at the bottom
-                    drawCadDimension(postW / 2 - bpW / 2, -bpH, postW / 2 + bpW / 2, -bpH, 12, formatFraction(bpW), "middle", "dim-width-overall");
-                } else {
-                    drawCadDimension(0, pHeight, postW, pHeight, -(distToTopMargin + 8), formatFraction(postW), "middle", "dim-width-post");
+                    drawCadDimension(bpLeftX, -bpH, bpRightX, -bpH, 10, formatFraction(bpW), "middle", "dim-width-overall");
                 }
 
-                // Vertical Dashed Centerline
+                // Vertical Dashed Centerline of post
                 const startY_cl = (includeBasePlates === 'yes' ? -bpH : 0) - 0.25;
                 const endY_cl = pHeight + 0.25;
-                const clStart = cadToPdf(postW / 2, startY_cl);
-                const clEnd = cadToPdf(postW / 2, endY_cl);
+                const clStart = cadToPdf(looseOffX, startY_cl);
+                const clEnd = cadToPdf(looseOffX, endY_cl);
                 doc.setDrawColor(0, 0, 0);
                 doc.setLineWidth(0.18);
                 doc.setLineDashPattern([2, 1.5], 0);
                 doc.line(clStart[0], clStart[1], clEnd[0], clEnd[1]);
                 doc.setLineDashPattern([], 0); // Restore solid line style
+
+                // Native Vector Drawing for Loose Post Shaft to match dashed centerline 1:1 in line weight, color, and precise alignment
+                const pTL = cadToPdf(postLeftX, pHeight);
+                const pBL = cadToPdf(postLeftX, 0);
+                const pTR = cadToPdf(postRightX, pHeight);
+                const pBR = cadToPdf(postRightX, 0);
+
+                doc.setDrawColor(0, 0, 0);
+                doc.setLineWidth(0.18);
+                
+                // Outer rectangle of post shaft
+                doc.line(pTL[0], pTL[1], pBL[0], pBL[1]); // Left wall
+                doc.line(pTR[0], pTR[1], pBR[0], pBR[1]); // Right wall
+                doc.line(pTL[0], pTL[1], pTR[0], pTR[1]); // Top cap
+                doc.line(pBL[0], pBL[1], pBR[0], pBR[1]); // Bottom cap
+
+                if (hasFlatBar) {
+                    const fbTL = cadToPdf(fbLeftX, topOfFb);
+                    const fbBL = cadToPdf(fbLeftX, yStart + 1.0);
+                    const fbTR = cadToPdf(fbRightX, topOfFb);
+                    const fbBR = cadToPdf(fbRightX, yStart + 1.0);
+                    
+                    doc.line(fbTL[0], fbTL[1], fbBL[0], fbBL[1]);
+                    doc.line(fbTR[0], fbTR[1], fbBR[0], fbBR[1]);
+                    doc.line(fbTL[0], fbTL[1], fbTR[0], fbTR[1]);
+                    doc.line(fbBL[0], fbBL[1], fbBR[0], fbBR[1]);
+                }
+
+                // Base Plate Outline Drawing
+                if (includeBasePlates === 'yes') {
+                    if (isWallMount) {
+                        const wallOffset = (parseFloat(bpc.wallMountOffset) || 1.0);
+                        const wallW = (bpc.plateShape === 'qiw_standard') ? (bpc.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpc.width) || 6.0);
+                        const wallH = (bpc.plateShape === 'qiw_standard') ? (bpc.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpc.height) || 6.0);
+                        const bpTL = cadToPdf(looseOffX - wallW / 2, wallOffset + wallH);
+                        const bpBR = cadToPdf(looseOffX + wallW / 2, wallOffset);
+                        doc.setLineWidth(0.18);
+                        doc.setDrawColor(0, 0, 0);
+                        doc.rect(bpTL[0], bpTL[1], bpBR[0] - bpTL[0], bpBR[1] - bpTL[1], 'S');
+                    } else {
+                        const bpTL = cadToPdf(bpLeftX, 0);
+                        const bpBR = cadToPdf(bpRightX, -bpH);
+                        doc.setLineWidth(0.18);
+                        doc.setDrawColor(0, 0, 0);
+                        doc.rect(bpTL[0], bpTL[1], bpBR[0] - bpTL[0], bpBR[1] - bpTL[1], 'S');
+                    }
+                }
             } else {
                 drawCadDimension(cadMinX, cadMaxY, cadMaxX, cadMaxY, dimOffset3, formatFraction(actualWidthInches), "middle", "dim-width");
                 drawCadDimension(cadMinX, cadMinY, cadMinX, cadMaxY, dimOffset3, formatFraction(actualHeightInches), "middle", "dim-height");
@@ -8134,16 +8913,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 const leaderAlign = isLeftReturn ? "left" : "right";
                 
                 const style = vals.railStyle || 'classical';
+                const props = getResolvedPanelProperties(vals, style);
                 
                 const isHardcodedStyle = (style === 'classical' || style === 'executive' || style === 'urban_balcony' || style === 'villa_balcony');
-                let pHeight = isHardcodedStyle ? 45.75 : (vals.postHeight || 42.0);
-                let fHeight = isHardcodedStyle ? 41.0 : (vals.fenceHeight || 36.0);
-                let topH = isHardcodedStyle ? 1.5 : getProfileDimension(vals.topRailType, vals.topRailSize, vals.topRailH || 1.5);
-                let botH = isHardcodedStyle ? 1.5 : getProfileDimension(vals.botRailType, vals.botRailSize, vals.botRailH || 1.5);
-                let midH = (style === 'classical') ? 0 : (isHardcodedStyle ? 1.5 : getProfileDimension(vals.midRailType, vals.midRailSize, vals.midRailH || 1.5));
-                let midRailGap = (style === 'classical') ? 0 : (isHardcodedStyle ? 3.0 : (vals.midRailGap || 12.0));
-                let postW = isHardcodedStyle ? 1.5 : getPicketDimension(vals.postType, vals.postSize, vals.postW || 1.5);
-                let picketW = (style === 'classical' || style === 'executive') ? 0.5 : getPicketDimension(vals.picketType, vals.picketSize, vals.picketW || 0.5);
+                let pHeight = props ? props.pHeight : (isHardcodedStyle ? 45.75 : (parseFloat(vals.postHeight) || 42.0));
+                let fHeight = props ? props.fHeight : (isHardcodedStyle ? 41.0 : (parseFloat(vals.fenceHeight) || 36.0));
+                let topH = props ? props.topRailH : (isHardcodedStyle ? 1.5 : getProfileDimension(vals.topRailType, vals.topRailSize, vals.topRailH || 1.5));
+                let botH = props ? props.botRailH : (isHardcodedStyle ? 1.5 : getProfileDimension(vals.botRailType, vals.botRailSize, vals.botRailH || 1.5));
+                let midH = props ? props.midRailH : ((style === 'classical') ? 0 : (isHardcodedStyle ? 1.5 : getProfileDimension(vals.midRailType, vals.midRailSize, vals.midRailH || 1.5)));
+                let midRailGap = props ? props.midRailGap : ((style === 'classical') ? 0 : (isHardcodedStyle ? 3.0 : (parseFloat(vals.midRailGap) || 12.0)));
+                let postW = props ? props.postW : (isHardcodedStyle ? 1.5 : getPicketDimension(vals.postType, vals.postSize, vals.postW || 1.5));
+                let picketW = props ? props.picketW : ((style === 'classical' || style === 'executive') ? 0.5 : getPicketDimension(vals.picketType, vals.picketSize, vals.picketW || 0.5));
 
                         const effectiveEmbed = 0;
                         const botY = pHeight - fHeight;
@@ -8157,7 +8937,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             // 1. Top Rail leader (1FB)
                             if (topMark) {
                                 const cyTop = pHeight - topH / 2;
-                                const targetX = vals.length * 0.25; // Point close to the left side where the label is drawn
+                                const targetX = isSpecialLeftReturn ? (vals.length * 0.75) : (vals.length * 0.25);
                                 addLeader(targetX, cyTop, topMark, "leader-top-rail");
                             }
                             // 2. Bottom Rail leaders
@@ -8182,7 +8962,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                             // 4. Right Corner Post leader
                             if (rightMark) {
-                                const cyRight = pHeight * 0.5;
+                                const cyRight = isSpecialLeftReturn ? (pHeight * 0.35) : (pHeight * 0.5);
                                 addLeader(vals.length - postW / 2, cyRight, rightMark, "leader-right-post");
                             }
 
@@ -8204,10 +8984,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                  const resolvedCenters = resolveMidPostCenters(vals.length, vals.leftPost, vals.rightPost, vals.midPosts, midPostCount, postW, customSpacings, style, vals.extra6, activePanelType, vals.deltaLeft || 0, vals.deltaRight || 0);
                                  if (resolvedCenters.length > 0) {
                                      const midCx = resolvedCenters[0];
-                                     const mpH = style === 'executive' ? 44.25 : (pHeight - topH);
-                                     const cyMidPost = mpH * 0.5;
-                                     const targetX = (leaderAlign === "right") ? (midCx - postW / 2) : (midCx + postW / 2);
-                                     addLeader(targetX, cyMidPost, midPostMark, "leader-mid-post");
+                                     const targetX = midCx - postW / 2;
+                                     const targetY = botY + botH;
+                                     addLeader(targetX, targetY, midPostMark, "leader-mid-post");
                                  }
                              }
 
@@ -8220,103 +8999,112 @@ document.addEventListener('DOMContentLoaded', () => {
                                       const rawPickX = pPositions[Math.min(2, pPositions.length - 1)];
                                       const pickCx = rawPickX + picketW / 2;
                                       const picketBottomY = botY + botH;
-                                      const pickCy = picketBottomY + 20.0;
+                                      const openingH = Math.max(2, pHeight - topH - botY - botH);
+                                      const pickCy = picketBottomY + openingH * 0.5;
                                       addLeader(pickCx, pickCy, picketMark, "leader-pickets");
                                   }
                              }
 
-                             if (isMeshStyle) {
-                                 const mBottomY = botY + botH;
-                                 const mTopY = (midMark) ? (pHeight - topH - midRailGap - midH) : (pHeight - topH);
-                                 const mHeight = mTopY - mBottomY;
+                              if (isMeshStyle) {
+                                  const mBottomY = botY + botH;
+                                  const mTopY = (midMark) ? (pHeight - topH - midRailGap - midH) : (pHeight - topH);
+                                  const mHeight = mTopY - mBottomY;
 
-                                 const uniqueMeshMarksSeen = new Set();
+                                  const uniqueMeshMarksSeen = new Set();
+                                  
+                                  railSpans.bottomSegments.forEach((seg, idx) => {
+                                      const hMark = hfbMarks[seg.len];
+                                      const pMark = meshPanelMarks[seg.len];
+                                      const vMark = vertFbMark;
 
-                                 railSpans.bottomSegments.forEach((seg, idx) => {
-                                     const baseMark = "a" + drawingNo;
-                                     const suffix = seg.mark.substring(baseMark.length);
-                                     const hMark = meshFbMark + suffix;
-                                     const pMark = meshPanelMark + suffix;
-                                     const vMark = meshFbMark + "V";
-
-                                     const startX = seg.start;
-                                     const endX = seg.end;
-                                     const spanW = endX - startX;
-                                      if (meshFbMark) {
-                                          if (!uniqueMeshMarksSeen.has(hMark)) {
-                                              uniqueMeshMarksSeen.add(hMark);
-                                              const fbY = mBottomY + 0.5;
-                                              const fbX = startX + spanW * 0.75;
-                                              addLeader(fbX, fbY, hMark, `leader-mesh-fb-${idx}`);
-                                          }
-                                          
-                                           if (!uniqueMeshMarksSeen.has(vMark)) {
-                                              uniqueMeshMarksSeen.add(vMark);
-                                              const leftOmitted = (idx === 0 && (vals.leftPost !== 'yes'));
-                                              const rightOmitted = (idx === railSpans.bottomSegments.length - 1 && (vals.rightPost !== 'yes'));
-                                              if (!(leftOmitted && rightOmitted)) {
-                                                   let vertFbX;
-                                                   if (leftOmitted) {
-                                                       vertFbX = startX + spanW - 0.5;
-                                                   } else if (rightOmitted) {
-                                                       vertFbX = startX + 0.5;
-                                                   } else {
-                                                       vertFbX = (leaderAlign === "right") ? (startX + 0.5) : (startX + spanW - 0.5);
-                                                   }
-                                                   const vertFbY = mBottomY + mHeight * 0.3;
-                                                   addLeader(vertFbX, vertFbY, vMark, `leader-mesh-fb-vert-${idx}`);
-                                               }
+                                      const startX = seg.start;
+                                      const endX = seg.end;
+                                      const spanW = endX - startX;
+                                       if (meshFbMark) {
+                                           if (!uniqueMeshMarksSeen.has(hMark)) {
+                                               uniqueMeshMarksSeen.add(hMark);
+                                               const fbY = mBottomY + 0.5;
+                                               const fbX = startX + spanW * 0.75;
+                                               addLeader(fbX, fbY, hMark, `leader-mesh-fb-${idx}`);
                                            }
-                                       }
-                                       if (meshPanelMark) {
-                                           if (!uniqueMeshMarksSeen.has(pMark)) {
-                                               uniqueMeshMarksSeen.add(pMark);
-                                               const mY = mBottomY + mHeight * 0.70;
-                                               const mX = startX + spanW * 0.35;
-                                               addLeader(mX, mY, pMark, `leader-mesh-panel-${idx}`);
+                                           
+                                            if (!uniqueMeshMarksSeen.has(vMark)) {
+                                               uniqueMeshMarksSeen.add(vMark);
+                                               const leftOmitted = (idx === 0 && (vals.leftPost !== 'yes'));
+                                               const rightOmitted = (idx === railSpans.bottomSegments.length - 1 && (vals.rightPost !== 'yes'));
+                                               if (!(leftOmitted && rightOmitted)) {
+                                                    const isPost1WithBasePlate = (idx === 0 && vals.includeBasePlates === 'yes' && midPostCount >= 2);
+                                                    if (!isPost1WithBasePlate) {
+                                                        let vertFbX;
+                                                        if (isSpecialLeftReturn) {
+                                                            vertFbX = startX + spanW - 0.75;
+                                                        } else if (leftOmitted) {
+                                                            vertFbX = startX + spanW - 0.75;
+                                                        } else if (rightOmitted) {
+                                                            vertFbX = startX + 0.75;
+                                                        } else {
+                                                            vertFbX = (leaderAlign === "right") ? (startX + 0.75) : (startX + spanW - 0.75);
+                                                        }
+                                                        const vertFbY = isSpecialLeftReturn ? (mBottomY + mHeight * 0.70) : (mBottomY + mHeight * 0.50);
+                                                        addLeader(vertFbX, vertFbY, vMark, `leader-mesh-fb-vert-${idx}`);
+                                                    }
+                                                }
                                             }
                                         }
-                                  });
-                              }
-                              
-                              // 9. Base Plate leader
-                              if (vals.includeBasePlates === 'yes') {
-                                  const bpc = vals.basePlateConfig || getDefaultBasePlateConfig();
-                                  const bpMarkStr = resolveBasePlatePieceMark(bpc);
-                                  if (bpMarkStr) {
-                                     let targetX = 0;
-                                     let targetY = -(vals.basePlateT || 0.5) / 2;
-                                     if (vals.leftPost === 'yes') {
-                                         targetX = postW / 2;
-                                     } else if (midPostCount > 0) {
-                                         const resolvedCenters = resolveMidPostCenters(vals.length, vals.leftPost, vals.rightPost, vals.midPosts, midPostCount, postW, customSpacings, style, vals.extra6, activePanelType, vals.deltaLeft || 0, vals.deltaRight || 0);
-                                         if (resolvedCenters.length > 0) {
-                                             targetX = resolvedCenters[0];
-                                         } else {
-                                             targetX = vals.length * 0.5;
+                                        if (meshPanelMark) {
+                                            if (!uniqueMeshMarksSeen.has(pMark)) {
+                                                uniqueMeshMarksSeen.add(pMark);
+                                                const mY = mBottomY + mHeight * 0.70;
+                                                const mX = startX + spanW * 0.35;
+                                                addLeader(mX, mY, pMark, `leader-mesh-panel-${idx}`);
+                                             }
                                          }
-                                     } else if (vals.rightPost === 'yes') {
-                                         targetX = vals.length - postW / 2;
-                                     } else {
-                                         targetX = vals.length * 0.5;
-                                     }
-                                     addLeader(targetX, targetY, bpMarkStr, "leader-base-plate");
-                                 }
-                              }
-                        } else {
+                                   });
+                               }
+                               
+                               // 9. Base Plate leader
+                               if (vals.includeBasePlates === 'yes') {
+                                   const bpc = vals.basePlateConfig || getDefaultBasePlateConfig();
+                                   const bpMarkStr = resolveBasePlatePieceMark(bpc);
+                                   if (bpMarkStr) {
+                                      let postCx = 0;
+                                      if (vals.leftPost === 'yes') {
+                                          postCx = postW / 2;
+                                      } else if (midPostCount > 0) {
+                                          const resolvedCenters = resolveMidPostCenters(vals.length, vals.leftPost, vals.rightPost, vals.midPosts, midPostCount, postW, customSpacings, style, vals.extra6, activePanelType, vals.deltaLeft || 0, vals.deltaRight || 0);
+                                          if (resolvedCenters.length > 0) {
+                                              postCx = resolvedCenters[0];
+                                          } else {
+                                              postCx = vals.length * 0.5;
+                                          }
+                                      } else if (vals.rightPost === 'yes') {
+                                          postCx = vals.length - postW / 2;
+                                      } else {
+                                          postCx = vals.length * 0.5;
+                                      }
+                                      const isWall_lead = bpc.connectionType === 'wall_mount';
+                                      const wallOffset_lead = isWall_lead ? (parseFloat(bpc.wallMountOffset) || 1.0) : 0;
+                                      const wallPlateW_lead = isWall_lead ? ((bpc.plateShape === 'qiw_standard') ? (bpc.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpc.width) || 6.0)) : (parseFloat(bpc.width) || 6.0);
+                                      const wallPlateH_lead = isWall_lead ? ((bpc.plateShape === 'qiw_standard') ? (bpc.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpc.height) || 6.0)) : (getProfileDimension('plate', vals.basePlateSize, vals.basePlateT || 0.5));
+                                      let targetX = postCx + wallPlateW_lead / 2;
+                                      let targetY = isWall_lead ? (wallOffset_lead + wallPlateH_lead / 2) : (-wallPlateH_lead / 2);
+                                      addLeader(targetX, targetY, bpMarkStr, "leader-base-plate");
+                                   }
+                               }
+                         } else {
                             // Main Panel
-                            // 1. Top Rail leader (1FB)
-                            if (topMark) {
-                                const cyTop = pHeight - topH / 2; // Corrected to top rail center
-                                const targetX = 0; // Point neatly to the left end face of the top rail
-                                addLeader(targetX, cyTop, topMark, "leader-top-rail");
-                            }
+                            // 1. Top Rail leader (1FB / a1.0)
+                             if (topMark) {
+                                 const cyTop = pHeight - topH / 2; // Top rail center
+                                 const targetX = isSpecialLeftReturn ? (vals.length - 2.0) : ((vals.leftPost === 'yes') ? (postW + 2.0) : 2.0);
+                                 addLeader(targetX, cyTop, topMark, "leader-top-rail");
+                             }
 
                             // 2. Bottom Rail leaders
                             if (botMark && railSpans.bottomSegments.length > 0) {
                                 railSpans.bottomSegments.forEach((seg, idx) => {
                                      const spanW = seg.end - seg.start;
-                                     const targetX = seg.start + spanW * 0.25;
+                                     const targetX = seg.start + spanW * 0.60;
                                      const targetY = botY + botH / 2;
                                      addLeader(targetX, targetY, seg.mark, `leader-bot-rail-seg-${idx}`);
                                  });
@@ -8348,7 +9136,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 const resolvedCenters = resolveMidPostCenters(vals.length, vals.leftPost, vals.rightPost, vals.midPosts, midPostCount, postW, customSpacings, style, vals.extra6, activePanelType, vals.deltaLeft || 0, vals.deltaRight || 0);
                                 if (resolvedCenters.length > 0) {
                                     const midCx = resolvedCenters[0];
-                                    const cyMidPost = botY + botH / 2;
+                                    const cyMidPost = isClassicStyle ? (botY + botH + 4.0) : (botY + botH / 2);
                                     addLeader(midCx, cyMidPost, midPostMark, "leader-mid-post");
                                 }
                             }
@@ -8362,7 +9150,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                     const rawPickX = isReturn ? pPositions[pPositions.length - 1] : pPositions[Math.min(2, pPositions.length - 1)];
                                     const pickCx = rawPickX + picketW / 2;
                                     const picketBottomY = botY + botH;
-                                    const pickCy = picketBottomY + 20.0;
+                                    const openingH = Math.max(2, pHeight - topH - botY - botH);
+                                    const pickCy = picketBottomY + openingH * 0.5;
                                     addLeader(pickCx, pickCy, picketMark, "leader-pickets");
                                 }
                             }
@@ -8409,43 +9198,41 @@ document.addEventListener('DOMContentLoaded', () => {
                                     return tx;
                                 };
 
-                                railSpans.bottomSegments.forEach((seg, idx) => {
-                                    const baseMark = "a" + drawingNo;
-                                    const suffix = seg.mark.substring(baseMark.length);
-                                    const hMark = meshFbMark + suffix;
-                                    const pMark = meshPanelMark + suffix;
-                                    const vMark = meshFbMark + "V";
+                                 railSpans.bottomSegments.forEach((seg, idx) => {
+                                     const hMark = hfbMarks[seg.len];
+                                     const pMark = meshPanelMarks[seg.len];
+                                     const vMark = vertFbMark;
 
-                                    const startX = seg.start;
-                                    const endX = seg.end;
-                                    const spanW = endX - startX;
+                                     const startX = seg.start;
+                                     const endX = seg.end;
+                                     const spanW = endX - startX;
 
-                                    if (meshFbMark) {
-                                        const fbY = mBottomY + 0.5;
-                                        const fbX = startX + spanW * 0.75;
-                                        addLeader(fbX, fbY, hMark, `leader-mesh-fb-${idx}`);
+                                     if (meshFbMark) {
+                                         const fbY = mBottomY + 0.5;
+                                         const fbX = startX + spanW * 0.75;
+                                         addLeader(fbX, fbY, hMark, `leader-mesh-fb-${idx}`);
 
-                                         const leftOmitted = (idx === 0 && (vals.leftPost !== 'yes'));
-                                         const rightOmitted = (idx === railSpans.bottomSegments.length - 1 && (vals.rightPost !== 'yes'));
-                                         if (!(leftOmitted && rightOmitted)) {
-                                            let vertFbX;
-                                            if (leftOmitted) {
-                                                vertFbX = endX - 0.5;
-                                            } else if (rightOmitted) {
-                                                vertFbX = startX + 0.5;
-                                            } else {
-                                                vertFbX = startX + 0.5;
-                                            }
-                                            const vertFbY = mBottomY + mHeight * 0.3;
-                                            addLeader(vertFbX, vertFbY, vMark, `leader-mesh-fb-vert-${idx}`);
-                                        }
-                                    }
-                                    if (meshPanelMark) {
-                                        const mY = mBottomY + mHeight * 0.70;
-                                        const mX = startX + spanW * 0.35;
-                                        addLeader(mX, mY, pMark, `leader-mesh-panel-${idx}`);
-                                    }
-                                });
+                                          const leftOmitted = (idx === 0 && (vals.leftPost !== 'yes'));
+                                          const rightOmitted = (idx === railSpans.bottomSegments.length - 1 && (vals.rightPost !== 'yes'));
+                                          if (!(leftOmitted && rightOmitted)) {
+                                             let vertFbX;
+                                             if (leftOmitted) {
+                                                 vertFbX = endX - 0.75;
+                                             } else if (rightOmitted) {
+                                                 vertFbX = startX + 0.75;
+                                             } else {
+                                                 vertFbX = startX + 0.75;
+                                             }
+                                             const vertFbY = mBottomY + mHeight * 0.50;
+                                             addLeader(vertFbX, vertFbY, vMark, `leader-mesh-fb-vert-${idx}`);
+                                         }
+                                     }
+                                     if (meshPanelMark) {
+                                         const mY = mBottomY + mHeight * 0.70;
+                                         const mX = startX + spanW * 0.35;
+                                         addLeader(mX, mY, pMark, `leader-mesh-panel-${idx}`);
+                                     }
+                                 });
                             }
                             
                             // 9. Base Plate leader
@@ -8453,26 +9240,110 @@ document.addEventListener('DOMContentLoaded', () => {
                                 const bpc = vals.basePlateConfig || getDefaultBasePlateConfig();
                                 const bpMarkStr = resolveBasePlatePieceMark(bpc);
                                 if (bpMarkStr) {
-                                    let targetX = 0;
-                                    let targetY = -(vals.basePlateT || 0.5) / 2;
+                                    let postCx = 0;
                                     if (vals.leftPost === 'yes') {
-                                        targetX = postW / 2;
+                                        postCx = postW / 2;
                                     } else if (midPostCount > 0) {
                                         const resolvedCenters = resolveMidPostCenters(vals.length, vals.leftPost, vals.rightPost, vals.midPosts, midPostCount, postW, customSpacings, style, vals.extra6, activePanelType, vals.deltaLeft || 0, vals.deltaRight || 0);
                                         if (resolvedCenters.length > 0) {
-                                            targetX = resolvedCenters[0];
+                                            postCx = resolvedCenters[0];
                                         } else {
-                                            targetX = vals.length * 0.5;
+                                            postCx = vals.length * 0.5;
                                         }
                                     } else if (vals.rightPost === 'yes') {
-                                        targetX = vals.length - postW / 2;
+                                        postCx = vals.length - postW / 2;
                                     } else {
-                                        targetX = vals.length * 0.5;
+                                        postCx = vals.length * 0.5;
                                     }
+
+                                    const isWall_lead = bpc.connectionType === 'wall_mount';
+                                    const wallOffset_lead = isWall_lead ? (parseFloat(bpc.wallMountOffset) || 1.0) : 0;
+                                    const wallPlateW_lead = isWall_lead ? ((bpc.plateShape === 'qiw_standard') ? (bpc.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpc.width) || 6.0)) : (parseFloat(bpc.width) || 6.0);
+                                    const wallPlateH_lead = isWall_lead ? ((bpc.plateShape === 'qiw_standard') ? (bpc.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpc.height) || 6.0)) : (getProfileDimension('plate', vals.basePlateSize, vals.basePlateT || 0.5));
+                                     
+                                    let targetX = postCx + wallPlateW_lead / 2;
+                                    let targetY = isWall_lead ? (wallOffset_lead + wallPlateH_lead / 2) : (-wallPlateH_lead / 2);
                                     addLeader(targetX, targetY, bpMarkStr, "leader-base-plate");
                                 }
                             }
                         }
+
+                        // Synchronize pendingLeaders text with consolidated BOM marks BEFORE grouping & deduplication!
+                        const prepBomItems = [];
+                        if (topMark) {
+                            const name = (style === 'classical' || style === 'executive') ? `HSS 1.5x1.5x16GA` : (vals.topRailSize === 'CUSTOM' ? `HSS ${topRailW}x${topRailH}x${topRailT}` : vals.topRailSize);
+                            prepBomItems.push({ mark: topMark, qty: 1, desc: name, remark: "TOP RUNNER", len: formatFraction(vals.length), len_dec: vals.length });
+                        }
+                        if (botMark && railSpans.bottomSegments) {
+                            const name = (style === 'classical' || style === 'executive') ? `HSS 1.5x1.5x16GA` : (vals.botRailSize === 'CUSTOM' ? `HSS ${botRailW}x${botRailH}x${botRailT}` : vals.botRailSize);
+                            railSpans.bottomSegments.forEach(seg => {
+                                prepBomItems.push({ mark: seg.mark, qty: 1, desc: name, remark: "BOTTOM RUNNER", len: formatFraction(seg.len), len_dec: seg.len });
+                            });
+                        }
+                        if (midMark && railSpans.midSegments) {
+                            const name = (style === 'executive' || style === 'villa_balcony') ? `HSS 1.5x1.5x16GA` : (vals.midRailSize === 'CUSTOM' ? `HSS ${midRailW}x${midRailH}x${midRailT}` : vals.midRailSize);
+                            railSpans.midSegments.forEach(seg => {
+                                prepBomItems.push({ mark: seg.mark, qty: 1, desc: name, remark: "MID RUNNER", len: formatFraction(seg.len), len_dec: seg.len });
+                            });
+                        }
+                        if (leftMark) {
+                            const name = (vals.postSize === 'CUSTOM') ? `HSS ${postW}x${postH}x${postT}` : vals.postSize;
+                            prepBomItems.push({ mark: leftMark, qty: 1, desc: name, remark: "LEFT POST", len: formatFraction(pHeight), len_dec: pHeight });
+                        }
+                        if (rightMark) {
+                            const name = (vals.postSize === 'CUSTOM') ? `HSS ${postW}x${postH}x${postT}` : vals.postSize;
+                            prepBomItems.push({ mark: rightMark, qty: 1, desc: name, remark: "RIGHT POST", len: formatFraction(pHeight), len_dec: pHeight });
+                        }
+                        if (midPostMark && midPostCount > 0) {
+                            const name = (vals.postSize === 'CUSTOM') ? `HSS ${postW}x${postH}x${postT}` : vals.postSize;
+                            const mpH = (style === 'executive' || style === 'executive_custom') ? 44.25 : (pHeight - topH);
+                            prepBomItems.push({ mark: midPostMark, qty: midPostCount, desc: name, remark: "MID POST", len: formatFraction(mpH), len_dec: mpH });
+                        }
+                        if (picketMark && finalPicketsCount > 0) {
+                            const name = vals.picketSize || 'HSS 1/2x1/2x16GA';
+                            prepBomItems.push({ mark: picketMark, qty: finalPicketsCount, desc: name, remark: "PICKET", len: formatFraction(pHeight - topH - botH), len_dec: pHeight - topH - botH });
+                        }
+                        if (bpMark) {
+                            const bpc = vals.basePlateConfig || getDefaultBasePlateConfig();
+                            const bpMarkStr = resolveBasePlatePieceMark(bpc);
+                            prepBomItems.push({ mark: bpMarkStr, qty: 1, desc: "BASE PLATE", remark: "BASE PLATE", len: formatFraction(6.0), len_dec: 6.0 });
+                        }
+
+                        const prepConsolidated = consolidateBOMItems(prepBomItems);
+
+                        pendingLeaders.forEach(lead => {
+                            let matching = null;
+                            if (lead.leaderId === 'leader-top-rail') {
+                                matching = prepConsolidated.find(c => c.remark && c.remark.includes('TOP'));
+                            } else if (lead.leaderId && lead.leaderId.startsWith('leader-bot-rail-seg-')) {
+                                const m = lead.leaderId.match(/leader-bot-rail-seg-(\d+)/);
+                                if (m && railSpans.bottomSegments) {
+                                    const seg = railSpans.bottomSegments[parseInt(m[1])];
+                                    if (seg) matching = prepConsolidated.find(c => c.remark && (c.remark.includes('BOT') || c.remark.includes('BOTTOM')) && Math.abs((c.len_dec || 0) - seg.len) < 0.01);
+                                }
+                            } else if (lead.leaderId && lead.leaderId.startsWith('leader-mid-rail-seg-')) {
+                                const m = lead.leaderId.match(/leader-mid-rail-seg-(\d+)/);
+                                if (m && railSpans.midSegments) {
+                                    const seg = railSpans.midSegments[parseInt(m[1])];
+                                    if (seg) matching = prepConsolidated.find(c => c.remark && c.remark.includes('MID') && !c.remark.includes('POST') && Math.abs((c.len_dec || 0) - seg.len) < 0.01);
+                                }
+                            } else if (lead.leaderId === 'leader-mid-post') {
+                                matching = prepConsolidated.find(c => c.remark && c.remark.includes('MID POST'));
+                            } else if (lead.leaderId === 'leader-left-post') {
+                                matching = prepConsolidated.find(c => c.remark && (c.remark.includes('LEFT POST') || c.remark.includes('L POST')));
+                            } else if (lead.leaderId === 'leader-right-post') {
+                                matching = prepConsolidated.find(c => c.remark && (c.remark.includes('RIGHT POST') || c.remark.includes('R POST')));
+                            } else if (lead.leaderId === 'leader-post' || lead.leaderId === 'leader-loose-post') {
+                                matching = prepConsolidated.find(c => c.remark && (c.remark.includes('LOOSE POST') || c.remark.includes('POST')));
+                            } else if (lead.leaderId === 'leader-pickets') {
+                                matching = prepConsolidated.find(c => c.remark && c.remark.includes('PICKET'));
+                            } else if (lead.leaderId === 'leader-base-plate') {
+                                matching = prepConsolidated.find(c => c.remark && c.remark.includes('BASE PLATE'));
+                            }
+                            if (matching && matching.mark) {
+                                lead.text = matching.mark;
+                            }
+                        });
 
                         // Filter duplicates with a smart bay-crowding distribution algorithm
                         const numBays = midPostCount + 1;
@@ -8514,8 +9385,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             
                             // Special check for vertical flat bar: prefer pointing next to the left mid post (index 1)
                             let preferredFound = false;
-                            if (mark.endsWith("V") && candidates.some(c => c.leaderId && c.leaderId.endsWith("-vert-1"))) {
-                                const pref = candidates.find(c => c.leaderId && c.leaderId.endsWith("-vert-1"));
+                            if (candidates.some(c => c.leaderId && c.leaderId.includes("mesh-fb-vert"))) {
+                                const pref = candidates.find(c => c.leaderId && c.leaderId.endsWith("-vert-1")) || candidates.find(c => c.leaderId && c.leaderId.includes("mesh-fb-vert"));
                                 if (pref) {
                                     bestLead = pref;
                                     preferredFound = true;
@@ -8566,7 +9437,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 lead.halfWidth = (textWidth + 6.0) / 2; // W_i / 2
                                 lead.labelX = lead.pdfTargetX;
                                 if (lead.leaderId === 'leader-mid-post') {
-                                    lead.labelX = lead.pdfTargetX + 18.0;
+                                    lead.labelX = lead.pdfTargetX - 22.0;
                                 } else if (lead.leaderId === 'leader-right-post') {
                                     lead.labelX = lead.pdfTargetX - 8.0;
                                 } else if (lead.leaderId === 'leader-left-post') {
@@ -8766,30 +9637,58 @@ document.addEventListener('DOMContentLoaded', () => {
                         const bottomLeaders = [];
 
                         uniqueLeaders.forEach(lead => {
-                            // All panels (main and returns): distribute to top, bottom, left to avoid vertical dimensions on the right
-                            if (lead.leaderId === 'leader-top-rail') {
-                                    // Top Rail (Main Mark): Draw on left margin to avoid crossing horizontal dimensions
-                                    leftLeaders.push(lead);
-                                } else if (lead.leaderId.startsWith('leader-mesh-panel-') || lead.leaderId.startsWith('leader-mid-rail-seg-')) {
+                            const isMeshVertFb = lead.leaderId.startsWith('leader-mesh-fb-vert-');
+                            const isClassicOrExecStyle = (style === 'classical' || style === 'executive' || style === 'classic_custom' || style === 'executive_custom' || (typeof style === 'string' && (style.toLowerCase().includes('classic') || style.toLowerCase().includes('executive'))));
+                            const isClassicOrExecPicket = (lead.leaderId === 'leader-pickets') && isClassicOrExecStyle;
+
+                            if (
+                                lead.leaderId.startsWith('leader-bot-rail-seg-') ||
+                                (lead.leaderId.startsWith('leader-mesh-fb-') && !isMeshVertFb) ||
+                                (isMeshVertFb && !isSpecialLeftReturn) ||
+                                lead.leaderId === 'leader-mid-post' ||
+                                (lead.leaderId === 'leader-right-post' && !isSpecialLeftReturn) ||
+                                lead.leaderId === 'leader-base-plate' ||
+                                lead.leaderId === 'leader-loose-bp' ||
+                                lead.leaderId === 'leader-kickplate' ||
+                                lead.leaderId === 'leader-panicbar' ||
+                                (lead.leaderId === 'leader-pickets' && !isClassicOrExecPicket)
+                            ) {
+                                bottomLeaders.push(lead);
+                            } else if (lead.leaderId.startsWith('leader-mesh-panel-') || lead.leaderId.startsWith('leader-mid-rail-seg-')) {
+                                const isUrbanReturn = (activePanelType === 'leftReturn' || activePanelType === 'rightReturn') && (typeof style === 'string' && style.toLowerCase().includes('urban'));
+                                if (isUrbanReturn && lead.leaderId.startsWith('leader-mesh-panel-')) {
+                                    if (isSpecialLeftReturn) {
+                                        rightLeaders.push(lead);
+                                    } else {
+                                        leftLeaders.push(lead);
+                                    }
+                                } else {
                                     topLeaders.push(lead);
-                                } else if (
-                                    lead.leaderId.startsWith('leader-bot-rail-seg-') ||
-                                    lead.leaderId.startsWith('leader-mesh-fb-') || // matches both horizontal & vertical mesh FB leaders
-                                    lead.leaderId === 'leader-kickplate' ||
-                                    lead.leaderId === 'leader-right-post' ||
-                                    lead.leaderId === 'leader-mid-post' ||
-                                    lead.leaderId === 'leader-panicbar' ||
-                                    lead.leaderId === 'leader-loose-bp' ||
-                                    lead.leaderId === 'leader-base-plate'
-                                ) {
-                                    bottomLeaders.push(lead);
+                                }
+                            } else {
+                                if (isSpecialLeftReturn) {
+                                    rightLeaders.push(lead);
                                 } else {
                                     leftLeaders.push(lead);
                                 }
+                            }
                         });
 
-                        // Sort both columns by target Y-coordinate (top-to-bottom)
-                        leftLeaders.sort((a, b) => a.pdfTargetY - b.pdfTargetY);
+                        // Sort side columns logically from top to bottom
+                        leftLeaders.sort((a, b) => {
+                            const getRank = (id) => {
+                                if (id === 'leader-top-rail') return 1;
+                                if (id && id.startsWith('leader-mesh-panel-')) return 2;
+                                if (id === 'leader-left-post') return 3;
+                                if (id === 'leader-pickets') return 4;
+                                if (id && id.startsWith('leader-bot-rail-seg-')) return 5;
+                                return 6;
+                            };
+                            const rA = getRank(a.leaderId);
+                            const rB = getRank(b.leaderId);
+                            if (rA !== rB) return rA - rB;
+                            return a.pdfTargetY - b.pdfTargetY;
+                        });
                         rightLeaders.sort((a, b) => a.pdfTargetY - b.pdfTargetY);
 
                         // Evenly distribute label Y positions strictly along the vertical span of the drawing (not above or below)
@@ -8877,9 +9776,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         let bottomLabelY_forUntangle;
                         const isClassicOrExec_forUntangle = (style === 'classical' || style === 'classic_custom' || style === 'executive' || style === 'executive_custom');
                         if (isMeshStyle || isClassicOrExec_forUntangle) {
-                            bottomLabelY_forUntangle = useCompressedDims ? (pdfY + drawH + 5.5) : (pdfY + drawH + 8.5);
+                            bottomLabelY_forUntangle = useCompressedDims ? (pdfY + drawH + 4.5) : (pdfY + drawH + 5.5);
                         } else {
-                            bottomLabelY_forUntangle = useCompressedDims ? (pdfY + drawH + 18.0) : (pdfY + drawH + 24.0);
+                            bottomLabelY_forUntangle = useCompressedDims ? (pdfY + drawH + 3.5) : (pdfY + drawH + 5.0);
                         }
                         untangleLeaders(bottomLeaders, bottomLabelY_forUntangle);
 
@@ -8928,7 +9827,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         const midRailTop = pHeightResolved - topHResolved - midRailGapResolved;
                         const midRailBottom = midRailTop - midHResolved;
                         
-                        const cutYTop = hasMid ? (midRailTop + 1.5) : (pHeightResolved + 4);
+                        const isVillaStyle = (style === 'villa_balcony' || style === 'villa_custom' || style.includes('villa'));
+                        const cutYTop = isVillaStyle ? (midRailTop + (midRailGapResolved / 2)) : ((hasMid) ? (midRailTop + 1.5) : (pHeightResolved + 4.0));
                         const cutYBot = hasMid ? (midRailBottom - 12) : (pHeightResolved - 12);
                         
                         const pTop = cadToPdf(cutX, cutYTop);
@@ -8936,11 +9836,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         
                         // Draw vertical cut line
                         doc.setDrawColor(0, 0, 0);
-                        doc.setLineWidth(0.28);
+                        doc.setLineWidth(0.15);
                         doc.line(pTop[0], pTop[1], pBot[0], pBot[1]);
                         
                         // Draw horizontal hook at the top pointing left/right (points to post side)
-                        const isLeft = (activePanelType === 'rightReturn' || activePanelType === 'main');
+                        let isLeft = (activePanelType === 'rightReturn' || activePanelType === 'main');
+                        if (isSpecialLeftReturn) isLeft = true;
                         const hookLength = 6.0; // in mm
                         const hookEndX = isLeft ? (pTop[0] - hookLength) : (pTop[0] + hookLength);
                         doc.line(pTop[0], pTop[1], hookEndX, pTop[1]);
@@ -8948,44 +9849,77 @@ document.addEventListener('DOMContentLoaded', () => {
                         // Draw arrowhead pointing left/right at the end of the hook
                         drawArrowhead(hookEndX, pTop[1], isLeft ? Math.PI : 0, 1.8);
                         
-                        // Draw text label "A" next to the arrowhead
+                        // Draw text label "A" next to the arrowhead or below mid runner for Villa
                         doc.setFont('helvetica', 'bold');
                         doc.setFontSize(7);
-                        if (isLeft) {
-                            doc.text("A", hookEndX - 3.5, pTop[1] + 2.5);
+                        if (isVillaStyle) {
+                            if (isLeft) {
+                                doc.text("A", pTop[0] + 2.5, pTop[1] + 11.0);
+                            } else {
+                                doc.text("A", pTop[0] - 5.5, pTop[1] + 11.0);
+                            }
                         } else {
-                            doc.text("A", hookEndX + 1.5, pTop[1] + 2.5);
+                            if (isLeft) {
+                                doc.text("A", hookEndX - 3.5, pTop[1] + 1.5);
+                            } else {
+                                doc.text("A", hookEndX + 1.5, pTop[1] + 1.5);
+                            }
                         }
                     }
                 }
             } else if (isLoosePost) {
                 const style = vals.railStyle || 'classical';
                 const props = getResolvedPanelProperties(vals, style);
-                let pHeight = props ? props.pHeight : 45.75;
+                const extraLen = parseFloat(vals.looseExtraLen) || parseFloat(document.getElementById('inp-loose-post-extra-len')?.value) || 0;
+                const looseOffX = getLoosePostOffsetX(vals, activePanelType);
+                let pHeight = (props ? props.pHeight : 45.75) + extraLen;
                 let postW = props ? props.postW : 1.5;
                 let includeBasePlates = props ? props.includeBasePlates : 'no';
                 let bpH = props ? props.bpH : 0.5;
                 let bpW = props ? props.bpW : 6.0;
 
-                const postDwgMark = mainMark;
+                const isRightPost = (activePanelType === 'looseRightPost');
+                const isMeshStyle = (style === 'urban_balcony' || style === 'villa_balcony' || style === 'urban_custom' || style === 'villa_custom');
+
+                const postDwgMark = (mainMark && (mainMark.toUpperCase().includes('LP') || mainMark.toUpperCase().includes('RP')))
+                    ? mainMark.toUpperCase()
+                    : `${drawingNo.toUpperCase()}${isRightPost ? 'RP' : 'LP'}`;
                 const cyPost = pHeight * 0.8;
-                const pPost = cadToPdf(0, cyPost);
-                // Callout on the left side of the post
-                drawCadLeader(0, cyPost, pdfX - 16, pPost[1], postDwgMark, "right", "leader-loose-post");
+                
+                if (isRightPost) {
+                    const cx = looseOffX + postW / 2;
+                    const pPost = cadToPdf(cx, cyPost);
+                    drawCadLeader(cx, cyPost, pdfX + drawW + 16, pPost[1], postDwgMark, "left", "leader-loose-post");
+                } else {
+                    const cx = looseOffX - postW / 2;
+                    const pPost = cadToPdf(cx, cyPost);
+                    drawCadLeader(cx, cyPost, pdfX - 16, pPost[1], postDwgMark, "right", "leader-loose-post");
+                }
 
                 if (includeBasePlates === 'yes') {
                     const bpc = vals.basePlateConfig || getDefaultBasePlateConfig();
                     const bpDwgMark = resolveBasePlatePieceMark(bpc);
-                    const cyBp = -bpH * 0.5;
-                    const pBp = cadToPdf(postW / 2 - bpW / 2, cyBp);
-                    // Callout on the left side of the base plate
-                    drawCadLeader(postW / 2 - bpW / 2, cyBp, pdfX - 16, pBp[1], bpDwgMark, "right", "leader-loose-bp");
+                    const isWallMount = (bpc.connectionType === 'wall_mount');
+                    const wallOffset = isWallMount ? (parseFloat(bpc.wallMountOffset) || 1.0) : 0;
+                    const wallPlateH = (bpc.plateShape === 'qiw_standard') ? (bpc.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpc.height) || 6.0);
+                    const wallPlateW = (bpc.plateShape === 'qiw_standard') ? (bpc.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpc.width) || 6.0);
+                    const cyBp = isWallMount ? (wallOffset + wallPlateH / 2) : (-bpH * 0.5);
+                    
+                    if (isRightPost) {
+                        const bpRightX = isWallMount ? (looseOffX + wallPlateW / 2) : (bpW / 2);
+                        const pBp = cadToPdf(bpRightX, cyBp);
+                        drawCadLeader(bpRightX, cyBp, pdfX + drawW + 16, pBp[1], bpDwgMark, "left", "leader-loose-bp");
+                    } else {
+                        const bpLeftX = isWallMount ? (looseOffX - wallPlateW / 2) : (-bpW / 2);
+                        const pBp = cadToPdf(bpLeftX, cyBp);
+                        drawCadLeader(bpLeftX, cyBp, pdfX - 16, pBp[1], bpDwgMark, "right", "leader-loose-bp");
+                    }
                 }
 
-                const isMeshStyle = (style === 'urban_balcony' || style === 'villa_balcony' || style === 'urban_custom' || style === 'villa_custom');
                 if (isMeshStyle) {
+                    const basePHeight = props ? props.pHeight : 45.75;
                     const fH = props ? props.fHeight : 41.0;
-                    const bY = pHeight - fH;
+                    const bY = basePHeight - fH;
                     const bH = (props && props.botRailH !== undefined) ? props.botRailH : 1.5;
                     const tH = (props && props.topRailH !== undefined) ? props.topRailH : 1.5;
                     const mGap = (props && props.midRailGap !== undefined) ? props.midRailGap : 3.0;
@@ -8994,16 +9928,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     const yStart = bY + bH;
                     const hasMid = (style === 'villa_balcony' || (style === 'villa_custom' && mType !== 'none'));
-                    const yEnd = hasMid ? (pHeight - tH - mGap - mH) : (pHeight - tH);
+                    const yEnd = hasMid ? (basePHeight - tH - mGap - mH) : (basePHeight - tH);
                     const fbHeight = yEnd - yStart;
                     const actualFbHeight = fbHeight - 2.0;
 
                     if (actualFbHeight > 0) {
-                        const fbDwgMark = `c${drawingNo.toUpperCase()}`;
-                        const cyFb = yStart + 1.0 + actualFbHeight * 0.2;
-                        const pFb = cadToPdf(postW + 1.0, cyFb);
-                        // Callout pointing to the flat bar outer edge (X = postW + 1.0) on the right
-                        drawCadLeader(postW + 1.0, cyFb, pdfX + drawW + 40, pFb[1], fbDwgMark, "left", "leader-loose-fb");
+                        const fbDwgMark = isRightPost ? `c${drawingNo.toUpperCase()}R` : `c${drawingNo.toUpperCase()}L`;
+                        const labelY_cad = (includeBasePlates === 'yes' ? -bpH : 0) - 3.5;
+                        const targetY = yStart + 1.5;
+                        
+                        if (isRightPost) {
+                            const targetX = looseOffX - postW / 2 - 0.5;
+                            const pFbLabel = cadToPdf(targetX, labelY_cad);
+                            drawCadLeader(targetX, targetY, pdfX - 22, pFbLabel[1], fbDwgMark, "right", "leader-loose-fb");
+                        } else {
+                            const targetX = looseOffX + postW / 2 + 0.5;
+                            const pFbLabel = cadToPdf(targetX, labelY_cad);
+                            drawCadLeader(targetX, targetY, pdfX + drawW + 22, pFbLabel[1], fbDwgMark, "left", "leader-loose-fb");
+                        }
                     }
                 }
             } else if (cat === 'rails_gates') {
@@ -9213,7 +10155,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const bpMarkStr = resolveBasePlatePieceMark(bpc);
 
                 doc.setDrawColor(0, 0, 0);
-                doc.setLineWidth(0.28);
+                doc.setLineWidth(0.15);
                 doc.setFillColor(255, 255, 255);
                 doc.rect(boxX, boxY, boxW, boxH, 'FD');
 
@@ -9223,13 +10165,152 @@ document.addEventListener('DOMContentLoaded', () => {
                 doc.setTextColor(0, 0, 0);
                 doc.text("TYPICAL BASE PLATE DETAILS", boxX + boxW / 2, boxY + 4.5, { align: "center" });
 
-                // Render plan view - centered horizontally
-                const cx1 = boxX + boxW / 2;
-                const cy1 = boxY + boxH / 2 + 1;
+                const isWallMount = (bpc.connectionType === 'wall_mount');
 
-                doc.setFont('helvetica', 'bold');
-                doc.setFontSize(4.5);
-                doc.text("PLAN VIEW", cx1, boxY + 9, { align: "center" });
+                if (isWallMount) {
+                    // --- WALL MOUNT BASE PLATE ELEVATION DETAIL VIEW (MATCHING SNAP 2) ---
+                    const cx = boxX + boxW / 2;
+                    const cy = boxY + boxH / 2 - 1.0;
+
+                    const wallOffsetVal = (bpc.wallMountOffset !== undefined && !isNaN(parseFloat(bpc.wallMountOffset))) ? parseFloat(bpc.wallMountOffset) : 1.0;
+                    const plateW_pdf = 22.0;
+                    const plateH_pdf = 18.0;
+                    const postW_pdf = 5.5;
+                    const postExt_pdf = (wallOffsetVal > 0) ? Math.max(2.0, Math.min(10.0, 4.5 * wallOffsetVal)) : 0; // 0 extension when offset is 0
+
+                    const plateLeft = cx - plateW_pdf / 2;
+                    const plateRight = cx + plateW_pdf / 2;
+                    const plateTop = cy - plateH_pdf / 2;
+                    const plateBot = cy + plateH_pdf / 2;
+                    const postBot = plateBot + postExt_pdf;
+                    const postTop = plateTop - 6.0;
+
+                    // 1. Vertical Post
+                    doc.setLineWidth(0.2);
+                    doc.setDrawColor(0, 0, 0);
+                    doc.rect(cx - postW_pdf / 2, postTop, postW_pdf, postBot - postTop, 'S');
+
+                    // 2. Base Plate Box
+                    doc.setLineWidth(0.15);
+                    doc.rect(plateLeft, plateTop, plateW_pdf, plateH_pdf, 'S');
+
+                    // 3. Vertical Dashed Center Line
+                    doc.setLineWidth(0.12);
+                    doc.setLineDashPattern([1.5, 1.5], 0);
+                    doc.line(cx, postTop - 2.0, cx, postBot + 3.0);
+                    doc.setLineDashPattern([], 0);
+
+                    // 4. 4 Solid Black Circular Bolt Holes
+                    const holeR = 0.9;
+                    const holeOffsetX = 3.2;
+                    const holeOffsetY = 3.0;
+                    const holeTL = [plateLeft + holeOffsetX, plateTop + holeOffsetY];
+                    const holeTR = [plateRight - holeOffsetX, plateTop + holeOffsetY];
+                    const holeBL = [plateLeft + holeOffsetX, plateBot - holeOffsetY];
+                    const holeBR = [plateRight - holeOffsetX, plateBot - holeOffsetY];
+
+                    doc.setFillColor(0, 0, 0);
+                    doc.circle(holeTL[0], holeTL[1], holeR, 'F');
+                    doc.circle(holeTR[0], holeTR[1], holeR, 'F');
+                    doc.circle(holeBL[0], holeBL[1], holeR, 'F');
+                    doc.circle(holeBR[0], holeBR[1], holeR, 'F');
+
+                    // 5. Leaders (matching Snap 2)
+                    // Top-Right Hole Leader -> "4 - 1/2" Ø"
+                    const rawHoleD = formatFraction(bpc.holeD || bpc.corners?.diameter || 0.5);
+                    const holeDStr = rawHoleD.replace(/"/g, '');
+                    const holeText = `4 - ${holeDStr}" \u00D8`;
+                    const trTextX = boxX + boxW - 1.5;
+                    const trTextY = plateTop - 3.5;
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(4.0);
+                    doc.text(holeText, trTextX, trTextY, { align: "right" });
+                    const trTextW = doc.getTextWidth(holeText);
+                    const trElbowX = trTextX - trTextW - 1.0;
+                    doc.setLineWidth(0.12);
+                    doc.line(trTextX - trTextW, trTextY + 0.6, trElbowX, trTextY + 0.6);
+                    doc.line(trElbowX, trTextY + 0.6, holeTR[0], holeTR[1]);
+                    const holeAngle = Math.atan2(holeTR[1] - (trTextY + 0.6), holeTR[0] - trElbowX);
+                    drawArrowhead(holeTR[0], holeTR[1], holeAngle, 0.5);
+
+                    // Plate Right Edge Leader -> "bp1"
+                    const bpTextX = boxX + boxW - 2.0;
+                    const bpTextY = plateBot + 3.0;
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(5.0);
+                    doc.text(bpMarkStr, bpTextX, bpTextY, { align: "right" });
+                    const bpTextW = doc.getTextWidth(bpMarkStr);
+                    const bpElbowX = bpTextX - bpTextW - 1.5;
+                    const bpTargetX = plateRight;
+                    const bpTargetY = plateBot - 2.0;
+                    doc.setLineWidth(0.12);
+                    doc.line(bpTextX - bpTextW, bpTextY - 1.0, bpElbowX, bpTextY - 1.0);
+                    doc.line(bpElbowX, bpTextY - 1.0, bpTargetX, bpTargetY);
+                    const bpAngle = Math.atan2(bpTargetY - (bpTextY - 1.0), bpTargetX - bpElbowX);
+                    drawArrowhead(bpTargetX, bpTargetY, bpAngle, 0.5);
+
+                    // 6. Dimensions (matching Snap 2)
+                    let actualPlateW = 6.0;
+                    let actualPlateH = 6.0;
+
+                    if (bpc.plateShape === 'qiw_standard') {
+                        if (bpc.qiwPlateType === 'QBP54') {
+                            actualPlateW = 5.0;
+                            actualPlateH = 5.0;
+                        } else {
+                            actualPlateW = 4.0;
+                            actualPlateH = 4.0;
+                        }
+                    } else {
+                        actualPlateW = parseFloat(bpc.width) || 6.0;
+                        actualPlateH = parseFloat(bpc.height) || 6.0;
+                    }
+
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(3.6);
+                    doc.setLineWidth(0.10);
+
+                    // Plate Height Dimension (Left)
+                    const dimLeftX1 = plateLeft - 4.0;
+                    doc.line(dimLeftX1, plateTop, dimLeftX1, plateBot);
+                    doc.line(dimLeftX1 - 0.8, plateTop, plateLeft - 0.5, plateTop);
+                    doc.line(dimLeftX1 - 0.8, plateBot, plateLeft - 0.5, plateBot);
+                    doc.text(formatFraction(actualPlateH), dimLeftX1 - 1.0, (plateTop + plateBot) / 2 + 1.0, { align: "right" });
+
+                    if (wallOffsetVal > 0) {
+                        // Post Extension Dimension (Left)
+                        const dimLeftX2 = plateLeft - 4.0;
+                        doc.line(dimLeftX2, plateBot, dimLeftX2, postBot);
+                        doc.line(dimLeftX2 - 0.8, postBot, cx - postW_pdf / 2 - 0.5, postBot);
+                        doc.text(formatFraction(wallOffsetVal), dimLeftX2 - 1.0, (plateBot + postBot) / 2 + 1.0, { align: "right" });
+                    }
+
+                    // Bottom Horizontal Center Dimensions (Half Width each side)
+                    const dimBotY = postBot + 3.0;
+                    const halfW_val = actualPlateW / 2;
+                    const halfW_str = formatFraction(halfW_val);
+                    // Left half (plateLeft to cx)
+                    doc.line(plateLeft, dimBotY, plateLeft, postBot + 0.5);
+                    doc.line(cx, dimBotY, cx, postBot + 0.5);
+                    doc.line(plateRight, dimBotY, plateRight, postBot + 0.5);
+                    doc.line(plateLeft, dimBotY, plateRight, dimBotY);
+
+                    // Ticks
+                    doc.line(plateLeft - 0.3, dimBotY - 0.3, plateLeft + 0.3, dimBotY + 0.3);
+                    doc.line(cx - 0.3, dimBotY - 0.3, cx + 0.3, dimBotY + 0.3);
+                    doc.line(plateRight - 0.3, dimBotY - 0.3, plateRight + 0.3, dimBotY + 0.3);
+
+                    doc.text(halfW_str, (plateLeft + cx) / 2, dimBotY + 3.0, { align: "center" });
+                    doc.text(halfW_str, (cx + plateRight) / 2, dimBotY + 3.0, { align: "center" });
+
+                } else {
+                    // Render plan view - centered horizontally
+                    const cx1 = boxX + boxW / 2;
+                    const cy1 = boxY + boxH / 2 + 1;
+
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(4.5);
+                    doc.text("PLAN VIEW", cx1, boxY + 9, { align: "center" });
 
                 // Walk model geometry for base plate plan view inside box
                 const basePlateModel = createCustomBasePlateModel(bpc);
@@ -9280,11 +10361,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
                 walkPlan(basePlateModel, [0, 0]);
 
-                // Draw post cross section outline in the middle of plan view
+                // Draw post cross section outline in plan view
+                const activeType = balconyWizardState.activePanelType || 'loosePost';
+                const offX = isLoosePost ? getLoosePostOffsetX(vals, activeType) : 0;
+                const offY = isLoosePost ? getLoosePostOffsetY(vals, activeType) : 0;
                 const postDrawW = bpPostW * bpScale;
                 const postDrawH = bpPostH * bpScale;
+                const postCx = cx1 + offX * bpScale;
+                const postCy = cy1 - offY * bpScale;
                 doc.setLineWidth(0.2);
-                doc.rect(cx1 - postDrawW / 2, cy1 - postDrawH / 2, postDrawW, postDrawH, 'S');
+                doc.rect(postCx - postDrawW / 2, postCy - postDrawH / 2, postDrawW, postDrawH, 'S');
+
+                if (offX !== 0 || offY !== 0) {
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(3.8);
+                    doc.setTextColor(0, 0, 0);
+                    let offStr = "";
+                    if (offX !== 0 && offY !== 0) offStr = `OFFSET: X=${offX}", Y=${offY}"`;
+                    else if (offX !== 0) offStr = `OFFSET X: ${offX}"`;
+                    else offStr = `OFFSET Y: ${offY}"`;
+                    doc.text(offStr, cx1, cy1 - h/2 * bpScale - 2.0, { align: "center" });
+                }
 
 
 
@@ -9438,42 +10535,43 @@ document.addEventListener('DOMContentLoaded', () => {
                 const postText = "HSS " + formatPostDim(bpPostW) + "x" + formatPostDim(bpPostH) + "x" + getPostGaugeSuffix(bpPostT) + " POST";
                 doc.setFont('helvetica', 'bold');
                 doc.setFontSize(3.0);
-                doc.text(postText, boxX + 1.5, boxY + 12, { align: "left" });
+                const postTextY = cy1 - 4.5;
+                doc.text(postText, boxX + 1.5, postTextY, { align: "left" });
                 
                 const tw = doc.getTextWidth(postText);
-                const postLeaderStartX = cx1;
-                const postLeaderStartY = cy1 - postDrawH / 2;
-                const postLeaderEndX = cx1 - 5;
-                const postLeaderEndY = boxY + 12;
+                const postLeaderStartX = postCx - postDrawW / 2;
+                const postLeaderStartY = postCy;
+                const postLeaderEndX = boxX + 1.5 + tw + 0.5;
+                const postLeaderEndY = postTextY;
                 
                 doc.setLineWidth(0.10);
                 doc.line(postLeaderStartX, postLeaderStartY, postLeaderEndX, postLeaderEndY);
-                doc.line(postLeaderEndX, postLeaderEndY, boxX + 1.5 + tw + 0.5, postLeaderEndY);
                 
                 const postAngle = Math.atan2(postLeaderStartY - postLeaderEndY, postLeaderStartX - postLeaderEndX);
                 drawArrowhead(postLeaderStartX, postLeaderStartY, postAngle, 0.6);
 
-                // Leader line pointing to base plate left edge labeling the piece mark (e.g. BP1)
+                // Leader line pointing to base plate left edge labeling the piece mark (e.g. bp1)
                 const bpLeaderStartX = cx1 - w/2 * bpScale;
-                const bpLeaderStartY = cy1 + h/4 * bpScale;
-                const bpLeaderEndX = cx1 - w/2 * bpScale - 2.5;
-                const bpLeaderEndY = cy1 + 6;
+                const bpLeaderStartY = cy1;
                 
                 doc.setFont('helvetica', 'bold');
                 doc.setFontSize(3.8);
-                doc.text(bpMarkStr, boxX + 1.5, cy1 + 6 + 0.5, { align: "left" });
+                doc.text(bpMarkStr, boxX + 1.5, cy1 + 1.0, { align: "left" });
                 const pmw = doc.getTextWidth(bpMarkStr);
                 
-                doc.line(bpLeaderStartX, bpLeaderStartY, bpLeaderEndX, bpLeaderEndY);
-                doc.line(bpLeaderEndX, bpLeaderEndY, boxX + 1.5 + pmw + 0.5, bpLeaderEndY);
+                doc.line(bpLeaderStartX, bpLeaderStartY, boxX + 1.5 + pmw + 0.5, cy1);
                 
-                const bpAngle = Math.atan2(bpLeaderStartY - bpLeaderEndY, bpLeaderStartX - bpLeaderEndX);
+                const bpAngle = Math.atan2(0, bpLeaderStartX - (boxX + 1.5 + pmw + 0.5));
                 drawArrowhead(bpLeaderStartX, bpLeaderStartY, bpAngle, 0.6);
 
-                // Leader line pointing to bottom-right hole (down-right, labeled outside on the right)
+                // Leader line pointing to bottom-right hole (underneath the 5" dimension line ticks)
                 const holes = getCustomBasePlateHoleCoordinates(bpc);
                 if (holes.length > 0) {
-                    const brHole = holes.reduce((prev, curr) => (curr.x > prev.x && curr.y > prev.y) ? curr : prev, holes[0]);
+                    const brHole = holes.reduce((prev, curr) => {
+                        if (curr.x > prev.x) return curr;
+                        if (curr.x === prev.x && curr.y < prev.y) return curr;
+                        return prev;
+                    }, holes[0]);
                     const bounds = bpc.plateShape === 'rect' 
                         ? { minX: 0, minY: 0 } 
                         : (bpc.plateShape === 'qiw_standard' ? { minX: 0, minY: 0 } : getPolyBounds(bpc.polyVerts));
@@ -9484,20 +10582,25 @@ document.addEventListener('DOMContentLoaded', () => {
                         ? `(${holes.length}) ${formatFraction(brHole.diameter)} x ${formatFraction(bpc.slotLength)} SLOT`
                         : `(${holes.length}) ${formatFraction(brHole.diameter)} \u00D8 HOLES`;
                     
+                    const textY = cy1 + h/2 * bpScale + 4.5;
                     doc.setFont('helvetica', 'normal');
                     doc.setFontSize(3.3);
-                    doc.text(holeDesc, boxX + boxW - 1.5, cy1 + 6 + 0.5, { align: "right" });
+                    doc.text(holeDesc, boxX + boxW - 1.5, textY, { align: "right" });
                     
                     const hw = doc.getTextWidth(holeDesc);
-                    const holeLeaderEndX = cx1 + w/2 * bpScale + 2.5;
-                    const holeLeaderEndY = cy1 + 6;
+                    const textStartX = boxX + boxW - 1.5 - hw - 0.5;
                     
-                    doc.line(hpx, hpy, holeLeaderEndX, holeLeaderEndY);
-                    doc.line(holeLeaderEndX, holeLeaderEndY, boxX + boxW - 1.5 - hw - 0.5, holeLeaderEndY);
+                    // Horizontal shoulder to elbow, then inclined leg UP-LEFT to bottom-right hole
+                    const elbowX = cx1 + w/2 * bpScale + 3.0;
+                    const elbowY = textY;
                     
-                    const holeAngle = Math.atan2(hpy - holeLeaderEndY, hpx - holeLeaderEndX);
+                    doc.line(textStartX, textY, elbowX, elbowY);
+                    doc.line(elbowX, elbowY, hpx, hpy);
+                    
+                    const holeAngle = Math.atan2(hpy - elbowY, hpx - elbowX);
                     drawArrowhead(hpx, hpy, holeAngle, 0.6);
                 }
+            }
             };
             const drawWireMeshDetail = (doc, boxX, boxY, boxW, boxH, vals) => {
                 const ratioX = boxW / 110;
@@ -9545,9 +10648,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 const postType = vals.postType || 'hss_rect';
                 const midPostCount = (vals.midPosts === 'default' || vals.midPosts === 'yes') ? Math.max(0, Math.ceil((vals.originalLength || vals.length) / 48) - 1) : ((vals.midPosts === 'custom' || vals.midPosts === 'custom_standard') ? (parseInt(vals.midPostCount) || 0) : 0);
-                const hasPost = (postType !== 'none' && postType !== 'no') && ((activePanelType === 'leftReturn' ? vals.rightPost === 'yes' : vals.leftPost === 'yes') || (vals.midPosts !== 'none' && midPostCount > 0));
+                let hasPost = (postType !== 'none' && postType !== 'no') && ((activePanelType === 'leftReturn' ? vals.rightPost === 'yes' : vals.leftPost === 'yes') || (vals.midPosts !== 'none' && midPostCount > 0));
+                if (isSpecialLeftReturn) {
+                    hasPost = false; // The left side of a left return does not have a post
+                }
 
-                doc.setLineWidth(0.09 * ratioX); // Thin structural outline
+                doc.setLineWidth(0.22 * ratioX); // Clean structural outline
                 // Draw Top Runner
                 doc.rect(topRunnerLeft, cy_top, trDrawW, trDrawH, 'S');
                 
@@ -9608,7 +10714,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const meshWireD = vals.meshWireD !== undefined ? vals.meshWireD : 0.135;
                 const meshText = `WWM${meshGridW}x${meshGridH}x${meshWireD}`;
                 
-                doc.setLineWidth(0.28 * ratioX);
+                doc.setLineWidth(0.15 * ratioX);
                 
                 // Vertical range for label texts on the right
                 const startY = boxY + 5.0 * ratioY;
@@ -9701,7 +10807,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const cx = boxX + (boxW > 60 ? 30 : 20);
                 const cy = boxY + boxH / 2 + 2;
                 
-                doc.setLineWidth(0.28);
+                doc.setLineWidth(0.15);
                 doc.rect(cx - 6, cy - 6, 12, 12, 'S');
                 doc.setFillColor(0, 0, 0);
                 doc.rect(cx - 7.5, cy - 6, 1.5, 12, 'FD');
@@ -9730,6 +10836,43 @@ document.addEventListener('DOMContentLoaded', () => {
                 doc.line(cx + 6.75, cy + 3, rightTextX - 22, cy + 14);
                 drawArrowhead(cx + 6.75, cy + 3, Math.atan2(3 - 14, cx + 6.75 - (rightTextX - 22)), 0.6);
                 doc.text("WELDED FB (MAIN)", rightTextX, cy + 14 + 0.5, { align: "right" });
+            };
+
+            const drawLooseTopViewDetail = (doc, boxX, boxY, boxW, boxH, vals) => {
+                doc.setDrawColor(0, 0, 0);
+                doc.setLineWidth(0.15);
+                doc.setFillColor(255, 255, 255);
+                doc.rect(boxX, boxY, boxW, boxH, 'FD');
+
+                const cx = boxX + boxW / 2;
+                const cy = boxY + boxH / 2 + 1.5;
+
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(5.2);
+                doc.setTextColor(0, 0, 0);
+                doc.text("TOP VIEW", cx, boxY + 6.5, { align: "center" });
+
+                const sqSide = 13.0;
+                const halfSq = sqSide / 2;
+                const tabLen = 7.5;
+
+                doc.setLineWidth(0.35);
+                doc.setDrawColor(0, 0, 0);
+                doc.rect(cx - halfSq, cy - halfSq, sqSide, sqSide, 'S');
+
+                const activeType = balconyWizardState.activePanelType || 'loosePost';
+                const isLeftPost = (activeType === 'looseLeftPost');
+                if (isLeftPost) {
+                    // Left Loose Post: Single line extending to the RIGHT from bottom-right corner
+                    const startX = cx + halfSq;
+                    const startY = cy + halfSq;
+                    doc.line(startX, startY, startX + tabLen, startY);
+                } else {
+                    // Right Loose Post / Loose Post: Single line extending to the LEFT from bottom-left corner
+                    const startX = cx - halfSq;
+                    const startY = cy + halfSq;
+                    doc.line(startX, startY, startX - tabLen, startY);
+                }
             };
 
             const topDetails = [];
@@ -9826,7 +10969,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return [x, y];
             }
 
-            function drawArrowhead(x, y, angle, size = 2.28) {
+            function drawArrowhead(x, y, angle, size = 1.8) {
                 let finalSize = size;
                 if (typeof pdfScale === 'number' && pdfScale > 0) {
                     finalSize = size * pdfScale;
@@ -9885,8 +11028,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const d2_extended_y = d2[1] + Math.sin(arrowAngle) * overshoot;
                 doc.line(d1_extended_x, d1_extended_y, d2_extended_x, d2_extended_y);
                 
-                // Draw bold architectural slash ticks slanting bottom-left to top-right
-                doc.setLineWidth(0.28);
+                // Draw clean architectural slash ticks slanting bottom-left to top-right
+                doc.setLineWidth(0.15);
                 const tickSize = 0.9;
                 doc.line(d1[0] - tickSize, d1[1] + tickSize, d1[0] + tickSize, d1[1] - tickSize);
                 doc.line(d2[0] - tickSize, d2[1] + tickSize, d2[0] + tickSize, d2[1] - tickSize);
@@ -10033,8 +11176,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const d2_extended_y = d2[1] + Math.sin(arrowAngle) * overshoot;
                 doc.line(d1_extended_x, d1_extended_y, d2_extended_x, d2_extended_y);
                 
-                // Draw bold architectural slash ticks slanting bottom-left to top-right
-                doc.setLineWidth(0.28);
+                // Draw clean architectural slash ticks slanting bottom-left to top-right
+                doc.setLineWidth(0.15);
                 const tickSize = 0.9;
                 doc.line(d1[0] - tickSize, d1[1] + tickSize, d1[0] + tickSize, d1[1] - tickSize);
                 doc.line(d2[0] - tickSize, d2[1] + tickSize, d2[0] + tickSize, d2[1] - tickSize);
@@ -10745,7 +11888,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     const style = vals.railStyle || 'classical';
                     const props = getResolvedPanelProperties(vals, style);
                     const includeBasePlates = props ? props.includeBasePlates : 'no';
-                    let pHeight = props ? props.pHeight : 45.75;
+                    const activeType = balconyWizardState.activePanelType || 'loosePost';
+                    const extraLen = parseFloat(vals[activeType + '_extraLen']) || parseFloat(vals.looseExtraLen) || parseFloat(document.getElementById('inp-loose-post-extra-len')?.value) || 0;
+                    const isMeshStyle = (style === 'urban_balcony' || style === 'villa_balcony' || style === 'urban_custom' || style === 'villa_custom');
+                    const defaultScenarioAQty = calculateScenarioADefaultQty(vals, null, activeType, isMeshStyle);
+                    const looseQty = parseInt(vals[activeType + '_qty']) || parseInt(vals.looseQty) || parseInt(document.getElementById('inp-loose-post-qty')?.value) || defaultScenarioAQty;
+                    const effectiveQty = looseQty * assemblyQty;
+                    let pHeight = (props ? props.pHeight : 45.75) + extraLen;
                     let topH = props ? props.topRailH : 1.5;
                     let postType = props ? props.postType : 'hss_rect';
                     let postSize = (style === 'classical' || style === 'executive' || style === 'urban_balcony' || style === 'villa_balcony') ? 'CUSTOM' : vals.postSize;
@@ -10753,12 +11902,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     let postH = props ? props.postH : 1.5;
                     let postT = props ? props.postT : 0.1196;
                     
-                    const postWeight = calculateWeight(postType, postSize, pHeight, { w: postW, h: postH, t: postT }, 1 * assemblyQty);
+                    const postWeight = calculateWeight(postType, postSize, pHeight, { w: postW, h: postH, t: postT }, effectiveQty);
                     const postDwgName = (style === 'classical' || style === 'executive' || style === 'urban_balcony' || style === 'villa_balcony') ? `HSS 1.5x1.5x11GA` : (vals.postSize === 'CUSTOM' ? `HSS ${postW}x${postH}x${postT}` : vals.postSize);
                     
+                    const isRightPost = (activePanelType === 'looseRightPost');
+                    const loosePostMark = (isLoosePost || activePanelType === 'looseRightPost' || activePanelType === 'looseLeftPost')
+                        ? ((mainMark && (mainMark.toUpperCase().includes('LP') || mainMark.toUpperCase().includes('RP')))
+                            ? mainMark.toUpperCase()
+                            : `${drawingNo.toUpperCase()}${isRightPost ? 'RP' : 'LP'}`)
+                        : mainMark;
+
                     bomItems.push({
-                        mark: mainMark,
-                        qty: 1 * assemblyQty,
+                        mark: loosePostMark,
+                        qty: effectiveQty,
                         desc: postDwgName,
                         remark: "LOOSE POST",
                         len: formatFraction(pHeight),
@@ -10779,11 +11935,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         const bpW_val = isQiw ? (bpc.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (bpc.width || 6.0);
                         const bpH_val = isQiw ? (bpc.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (bpc.height || 6.0);
                         const bpT_val = isQiw ? (bpc.qiwPlateType === 'QBP54' ? 0.25 : 0.1875) : (bpc.thickness || 0.5);
-                        const bpWeight = calculateWeight('plate', 'CUSTOM', bpH_val, { w: bpW_val, h: bpH_val, t: bpT_val }, 1 * assemblyQty);
+                        const bpWeight = calculateWeight('plate', 'CUSTOM', bpH_val, { w: bpW_val, h: bpH_val, t: bpT_val }, effectiveQty);
                         
                         bomItems.push({
                             mark: bpMarkStr,
-                            qty: 1 * assemblyQty,
+                            qty: effectiveQty,
                             desc: bpDesc,
                             remark: "BASE PLATE",
                             len: isQiw ? "" : formatLengthAlwaysFeet(bpH_val),
@@ -10795,7 +11951,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         });
                     }
 
-                    const isMeshStyle = (style === 'urban_balcony' || style === 'villa_balcony' || style === 'urban_custom' || style === 'villa_custom');
                     if (isMeshStyle) {
                         const botRailH = props ? props.botRailH : 1.5;
                         const topRailH = props ? props.topRailH : 1.5;
@@ -10804,18 +11959,26 @@ document.addEventListener('DOMContentLoaded', () => {
                         const midRailGap = props ? props.midRailGap : 12.0;
                         const fenceHeight = props ? props.fHeight : 36.0;
 
-                        const bY = pHeight - fenceHeight;
+                        const basePHeight = props ? props.pHeight : 45.75;
+                        const bY = basePHeight - fenceHeight;
                         const yStart = bY + botRailH;
                         const hasMid = (style === 'villa_balcony' || (style === 'villa_custom' && midRailType !== 'none'));
-                        const yEnd = hasMid ? (pHeight - topRailH - midRailGap - midRailH) : (pHeight - topRailH);
+                        const yEnd = hasMid ? (basePHeight - topRailH - midRailGap - midRailH) : (basePHeight - topRailH);
                         const fbHeight = yEnd - yStart;
                         const actualFbHeight = fbHeight - 2.0;
 
                         if (actualFbHeight > 0) {
-                            const fbWeight = calculateWeight('plate', 'CUSTOM', actualFbHeight, { w: 1.0, h: actualFbHeight, t: 0.125 }, 1 * assemblyQty);
+                            const isReturn = (activePanelType === 'leftReturn' || activePanelType === 'rightReturn');
+                            let looseFbMark = `c${drawingNo.toUpperCase()}`;
+                            if (isLoosePost || activePanelType === 'looseRightPost' || activePanelType === 'looseLeftPost') {
+                                looseFbMark = isRightPost ? `c${drawingNo.toUpperCase()}R` : `c${drawingNo.toUpperCase()}L`;
+                            } else if (isReturn) {
+                                looseFbMark = (activePanelType === 'rightReturn') ? `c${drawingNo.toUpperCase()}RR` : `c${drawingNo.toUpperCase()}RL`;
+                            }
+                            const fbWeight = calculateWeight('plate', 'CUSTOM', actualFbHeight, { w: 1.0, h: actualFbHeight, t: 0.125 }, effectiveQty);
                             bomItems.push({
-                                mark: `c${drawingNo.toUpperCase()}`,
-                                qty: 1 * assemblyQty,
+                                mark: looseFbMark,
+                                qty: effectiveQty,
                                 desc: `FB 1"x1/8"`,
                                 remark: "ATTACHED FB",
                                 len: formatFraction(actualFbHeight),
@@ -11195,94 +12358,81 @@ document.addEventListener('DOMContentLoaded', () => {
                         const picketTopY = (midRailType !== 'none') ? (pHeight - topH - midRailGap - midH) : (pHeight - topH);
                         const fbHeight = picketTopY - picketBottomY;
                         
-                        // Group by suffix/length for Horizontal Flat Bars and Wire Mesh Panels
-                        const meshGroups = {};
+                        const spanLengths = [];
                         railSpans.bottomSegments.forEach(seg => {
-                            const baseMark = "a" + drawingNo;
-                            const suffix = seg.mark.substring(baseMark.length);
-                            const hMark = meshFbMark + suffix;
-                            const pMark = meshPanelMark + suffix;
-                            
-                            if (!meshGroups[suffix]) {
-                                meshGroups[suffix] = {
-                                    len: seg.len,
-                                    qty: 0,
-                                    hMark: hMark,
-                                    pMark: pMark
-                                };
+                            if (!spanLengths.includes(seg.len)) {
+                                spanLengths.push(seg.len);
                             }
-                            meshGroups[suffix].qty++;
+                        });
+
+                        const spanQuantities = {};
+                        railSpans.bottomSegments.forEach(seg => {
+                            spanQuantities[seg.len] = (spanQuantities[seg.len] || 0) + 1;
                         });
 
                         // Horizontal flat bars
-                        if (meshFbMark) {
-                            Object.keys(meshGroups).forEach(suffix => {
-                                const group = meshGroups[suffix];
-                                const fbHorizQty = 2 * group.qty * assemblyQty;
-                                const wValHoriz = calculateWeight('plate', 'CUSTOM', group.len, { w: 1.0, h: group.len, t: 0.125 }, fbHorizQty);
-                                bomItems.push({
-                                    mark: group.hMark,
-                                    qty: fbHorizQty,
-                                    desc: `FB 1"x1/8"`,
-                                    remark: "MESH FRAME HORIZ",
-                                    len: formatFraction(group.len),
-                                    weight: Math.round(wValHoriz * 10) / 10,
-                                    shape: 'FLAT_BAR',
-                                    size: `1"x1/8"`,
-                                    len_dec: group.len
-                                });
+                        spanLengths.forEach(len => {
+                            const groupQty = spanQuantities[len];
+                            const fbHorizQty = 2 * groupQty * assemblyQty;
+                            const wValHoriz = calculateWeight('plate', 'CUSTOM', len, { w: 1.0, h: len, t: 0.125 }, fbHorizQty);
+                            bomItems.push({
+                                mark: hfbMarks[len],
+                                qty: fbHorizQty,
+                                desc: `FB 1"x1/8"`,
+                                remark: "MESH FRAME HORIZ",
+                                len: formatFraction(len),
+                                weight: Math.round(wValHoriz * 10) / 10,
+                                shape: 'FLAT_BAR',
+                                size: `1"x1/8"`,
+                                len_dec: len
                             });
-                        }
+                        });
 
                         // Vertical flat bars
-                        if (meshFbMark) {
-                            const leftOmitted = (vals.leftPost === 'yes') ? 0 : 1;
-                            const rightOmitted = (vals.rightPost === 'yes') ? 0 : 1;
-                            const fbVertQty = (2 * (midPostCount + 1) - leftOmitted - rightOmitted) * assemblyQty;
-                            if (fbVertQty > 0) {
-                                const fbVertLen = fbHeight - 2.0;
-                                const wValVert = calculateWeight('plate', 'CUSTOM', fbVertLen, { w: 1.0, h: fbVertLen, t: 0.125 }, fbVertQty);
-                                bomItems.push({
-                                    mark: meshFbMark + "V",
-                                    qty: fbVertQty,
-                                    desc: `FB 1"x1/8"`,
-                                    remark: "MESH FRAME VERT",
-                                    len: formatFraction(fbVertLen),
-                                    weight: Math.round(wValVert * 10) / 10,
-                                    shape: 'FLAT_BAR',
-                                    size: `1"x1/8"`,
-                                    len_dec: fbVertLen
-                                });
-                            }
+                        const leftOmitted = (vals.leftPost === 'yes') ? 0 : 1;
+                        const rightOmitted = (vals.rightPost === 'yes') ? 0 : 1;
+                        const fbVertQty = (2 * (midPostCount + 1) - leftOmitted - rightOmitted) * assemblyQty;
+                        if (fbVertQty > 0) {
+                            const fbVertLen = fbHeight - 2.0;
+                            const wValVert = calculateWeight('plate', 'CUSTOM', fbVertLen, { w: 1.0, h: fbVertLen, t: 0.125 }, fbVertQty);
+                            bomItems.push({
+                                mark: vertFbMark,
+                                qty: fbVertQty,
+                                desc: `FB 1"x1/8"`,
+                                remark: "MESH FRAME VERT",
+                                len: formatFraction(fbVertLen),
+                                weight: Math.round(wValVert * 10) / 10,
+                                shape: 'FLAT_BAR',
+                                size: `1"x1/8"`,
+                                len_dec: fbVertLen
+                            });
                         }
 
                         // Wire Mesh Panels
-                        if (meshPanelMark) {
-                            const meshGridW = vals.meshGridW !== undefined ? vals.meshGridW : 2.0;
-                            const meshGridH = vals.meshGridH !== undefined ? vals.meshGridH : 2.0;
-                            const meshWireD = vals.meshWireD !== undefined ? vals.meshWireD : 0.135;
-                            const wwmSize = `${meshGridW}x${meshGridH}x${meshWireD} x ${formatFraction(fbHeight)}`;
+                        const meshGridW = vals.meshGridW !== undefined ? vals.meshGridW : 2.0;
+                        const meshGridH = vals.meshGridH !== undefined ? vals.meshGridH : 2.0;
+                        const meshWireD = vals.meshWireD !== undefined ? vals.meshWireD : 0.135;
+                        const wwmSize = `${meshGridW}x${meshGridH}x${meshWireD} x ${formatFraction(fbHeight)}`;
 
-                            Object.keys(meshGroups).forEach(suffix => {
-                                const group = meshGroups[suffix];
-                                const meshQty = group.qty * assemblyQty;
-                                const meshAreaSqFt = (group.len * fbHeight) / 144.0;
-                                const wValMesh = meshAreaSqFt * 1.5 * meshQty; // 1.5 lbs/sqft
-                                const wwmDesc = `WWM ${meshGridW}x${meshGridH}x${meshWireD} x ${formatFraction(fbHeight)}`;
-                                
-                                bomItems.push({
-                                    mark: group.pMark,
-                                    qty: meshQty,
-                                    desc: wwmDesc,
-                                    remark: "WWM WIRE MESH",
-                                    len: formatFraction(group.len),
-                                    weight: Math.round(wValMesh * 10) / 10,
-                                    shape: 'WWM',
-                                    size: wwmSize,
-                                    len_dec: group.len
-                                });
+                        spanLengths.forEach(len => {
+                            const groupQty = spanQuantities[len];
+                            const meshQty = groupQty * assemblyQty;
+                            const meshAreaSqFt = (len * fbHeight) / 144.0;
+                            const wValMesh = meshAreaSqFt * 1.5 * meshQty;
+                            const wwmDesc = `WWM ${meshGridW}x${meshGridH}x${meshWireD} x ${formatFraction(fbHeight)}`;
+                            
+                            bomItems.push({
+                                mark: meshPanelMarks[len],
+                                qty: meshQty,
+                                desc: wwmDesc,
+                                remark: "WWM WIRE MESH",
+                                len: formatFraction(len),
+                                weight: Math.round(wValMesh * 10) / 10,
+                                shape: 'WWM',
+                                size: wwmSize,
+                                len_dec: len
                             });
-                        }
+                        });
                     }
 
                     if (vals.extraFlatBar === 'yes' && (activePanelType === 'leftReturn' || activePanelType === 'rightReturn') && vals.leftPost === 'yes') {
@@ -12020,6 +13170,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isMeshStyle && !isLoosePost) {
                 bottomDetails.push('wire_mesh');
             }
+            if (isMeshStyle && isLoosePost) {
+                bottomDetails.push('loose_top_view');
+            }
             if (isMeshStyle && !isLoosePost && (activePanelType === 'leftReturn' || activePanelType === 'rightReturn') && vals.extraFlatBar === 'yes' && vals.leftPost === 'yes') {
                 bottomDetails.push('extra_flat_bar');
             }
@@ -12032,11 +13185,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const leftSpace = pdfX - 9;
                 const rightSpace = 198 - (pdfX + drawW);
                 const isReturn = (activePanelType === 'leftReturn' || activePanelType === 'rightReturn');
-                const placeOnLeft = isReturn || (leftSpace > rightSpace);
+                const placeOnLeft = isReturn || isLoosePost || (leftSpace > rightSpace);
                 
                 bottomDetails.forEach((detail, index) => {
                     let boxX, boxY, boxW;
-                    const basePlatePresent = (vals.includeBasePlates === 'yes' && !isLoosePost);
+                    const basePlatePresent = (vals.includeBasePlates === 'yes');
                     if (bottomDetails.length === 1) {
                         boxW = 48;
                         if (placeOnLeft) {
@@ -12061,6 +13214,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         drawWireMeshDetail(doc, boxX, boxY, boxW, boxH, vals);
                     } else if (detail === 'extra_flat_bar') {
                         drawExtraFlatBarDetail(doc, boxX, boxY, boxW, boxH, vals);
+                    } else if (detail === 'loose_top_view') {
+                        drawLooseTopViewDetail(doc, boxX, boxY, boxW, boxH, vals);
                     }
                 });
             }
@@ -12143,6 +13298,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // --- DRAW BOTTOM TITLE BLOCKS (y = 175 to 203, height = 28mm) ---
             const blockY = 175;
+
+            // --- DRAW GENERAL NOTE BOX (SNAP 3 STYLE) ---
+            const noteBoxX = 202.5;
+            const noteBoxW = 87.5; // Spans right title block (Job No, Fab No, Drawn By section)
+            const noteBoxY = blockY - 6.0;
+            const noteBoxH = 6.0;
+            doc.setLineWidth(0.35);
+            doc.setDrawColor(0, 0, 0);
+            doc.rect(noteBoxX, noteBoxY, noteBoxW, noteBoxH, 'S');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(7.5);
+            doc.text("NOTE: ALL MATERIAL ON CENTER U.N.O.", noteBoxX + noteBoxW / 2, noteBoxY + 4.2, { align: "center" });
             
 
 
@@ -12259,7 +13426,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isPreviewOnly) {
                 const blob = doc.output('blob');
                 const blobUrl = URL.createObjectURL(blob);
-                resolve({ blobUrl: blobUrl, bomItems: bomItems });
+                resolve({ blobUrl: blobUrl, bomItems: consolidatedBomItems });
                 return;
             }
 
@@ -12267,7 +13434,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (url && url.indexOf('blob:') === 0) {
                     URL.revokeObjectURL(url);
                 }
-                resolve({ pdfData: doc.output('arraybuffer'), bomItems: bomItems });
+                resolve({ pdfData: doc.output('arraybuffer'), bomItems: consolidatedBomItems });
                 return;
             }
 
@@ -12299,7 +13466,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const excelRows = [];
 
-                bomItems.forEach(item => {
+                consolidatedBomItems.forEach(item => {
                     // Determine shape: if it contains HSS, put only HSS
                     let shapeCol = (item.shape || '').toUpperCase();
                     if (shapeCol.includes('HSS')) {
@@ -13073,7 +14240,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const vals = {};
             dynamicInputs.querySelectorAll('input').forEach(inp => {
                 const id = inp.id.replace('inp-', '');
-                vals[id] = (inp.type === 'text') ? inp.value : (parseFloat(inp.value) || 0);
+                vals[id] = (inp.type === 'checkbox') ? (inp.checked ? 'yes' : 'no') : ((inp.type === 'text') ? inp.value : (parseFloat(inp.value) || 0));
             });
             dynamicInputs.querySelectorAll('select').forEach(sel => {
                 vals[sel.id.replace('inp-', '')] = sel.value;
@@ -13105,7 +14272,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const activeSet = balconyWizardState.tempSet || (balconyWizardState.sets ? balconyWizardState.sets[balconyWizardState.activeSetIdx] : null);
                 const activePanelType = balconyWizardState.activePanelType || 'main';
                 if (activeSet) {
-                    const panelObj = (activePanelType === 'main' || activePanelType === 'loosePost') ? activeSet.main : (activePanelType === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
+                    const panelObj = (activePanelType === 'main' || (activePanelType && activePanelType.startsWith('loose'))) ? activeSet.main : (activePanelType === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
                     if (panelObj) {
                         for (const key in panelObj) {
                             vals[key] = panelObj[key];
@@ -13163,7 +14330,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const spanW = clearWidth / (midPostCount + 1);
 
                 const panelType = balconyWizardState.activePanelType || 'main';
-                const isLoosePost = (panelType === 'loosePost');
+                const isLoosePost = ((panelType && panelType.startsWith('loose')));
                 const hasLeft = (vals.leftPost === 'yes');
                 const hasRight = (vals.rightPost === 'yes');
 
@@ -13188,6 +14355,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 const railSpans = resolveRailMarksAndSpans(vals, drawingNo, cat, style, postW);
 
                 if (isLoosePost) {
+                    const activeType = balconyWizardState.activePanelType || 'loosePost';
+                    const chkInp = document.getElementById('inp-loose-post-include-bp');
+                    const incBPVal = chkInp ? (chkInp.checked ? 'yes' : 'no') : (vals[activeType + '_includeBasePlates'] ?? vals.looseIncludeBasePlates ?? vals.includeBasePlates ?? 'yes');
+                    vals.includeBasePlates = incBPVal;
+                    vals.looseIncludeBasePlates = incBPVal;
+                    vals[activeType + '_includeBasePlates'] = incBPVal;
+
+                    const extraLen = parseFloat(vals[activeType + '_extraLen']) || parseFloat(vals.looseExtraLen) || parseFloat(document.getElementById('inp-loose-post-extra-len')?.value) || 0;
+                    const looseQty = parseInt(vals[activeType + '_qty']) || parseInt(vals.looseQty) || parseInt(document.getElementById('inp-loose-post-qty')?.value) || 1;
+                    const effectivePHeight = pHeight + extraLen;
+
                     const activeDwg = getActiveBalconyDwgAndMark();
                     const postDwgMark = activeDwg ? activeDwg.mainMark : drawingNo.toUpperCase();
                     const postDwgName = (style === 'classical' || style === 'executive' || style === 'urban_balcony' || style === 'villa_balcony') ? `HSS 1.5x1.5x11GA` : (vals.postSize === 'CUSTOM' ? `HSS ${postW}x${postH}x${postT}` : vals.postSize);
@@ -13195,13 +14373,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         mark: postDwgMark,
                         remark: "LOOSE POST",
                         desc: postDwgName,
-                        qty: 1,
-                        len: formatFraction(pHeight),
+                        qty: looseQty,
+                        len: formatFraction(effectivePHeight),
                         shape: postType.toUpperCase(),
                         size: postDwgName
                     });
                     
-                    if (vals.includeBasePlates === 'yes') {
+                    if (incBPVal === 'yes') {
                         const bpc = vals.basePlateConfig || getDefaultBasePlateConfig();
                         const bpMarkStr = resolveBasePlatePieceMark(bpc);
                         const isQiw = bpc.plateShape === 'qiw_standard';
@@ -13212,7 +14390,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             mark: bpMarkStr,
                             remark: "BASE PLATE",
                             desc: bpDesc,
-                            qty: 1,
+                            qty: looseQty,
                             len: isQiw ? "" : formatLengthAlwaysFeet(bpc.height || 6.0),
                             shape: isQiw ? 'BY' : 'PL',
                             size: bpDesc,
@@ -13308,38 +14486,47 @@ document.addEventListener('DOMContentLoaded', () => {
                         const picketTopY = (midMark) ? (pHeight - topH - midRailGap - midH) : (pHeight - topH);
                         const fbHeight = picketTopY - picketBottomY;
 
-                        // Group by suffix/length for Horizontal Flat Bars and Wire Mesh Panels
-                        const meshGroups = {};
+                        const sheetNum = (drawingNo || '1').toString().toUpperCase().replace(/[^A-Z0-9.]/g, '');
+                        const spanLengths = [];
                         railSpans.bottomSegments.forEach(seg => {
-                            const baseMark = "a" + drawingNo;
-                            const suffix = seg.mark.substring(baseMark.length);
-                            const hMark = meshFbMark + suffix;
-                            const pMark = meshPanelMark + suffix;
-                            
-                            if (!meshGroups[suffix]) {
-                                meshGroups[suffix] = {
-                                    len: seg.len,
-                                    qty: 0,
-                                    hMark: hMark,
-                                    pMark: pMark
-                                };
+                            if (!spanLengths.includes(seg.len)) {
+                                spanLengths.push(seg.len);
                             }
-                            meshGroups[suffix].qty++;
+                        });
+
+                        let charIdx = 97 + spanLengths.length + (midPostCount > 0 ? 1 : 0);
+
+                        const hfbMarks = {};
+                        const meshPanelMarks = {};
+                        spanLengths.forEach(len => {
+                            hfbMarks[len] = String.fromCharCode(charIdx++) + sheetNum;
+                        });
+                        
+                        const vertFbMark = String.fromCharCode(charIdx++) + sheetNum;
+                        
+                        spanLengths.forEach(len => {
+                            meshPanelMarks[len] = String.fromCharCode(charIdx++) + sheetNum;
+                        });
+
+                        const meshGroupQty = {};
+                        railSpans.bottomSegments.forEach(seg => {
+                            if (!meshGroupQty[seg.len]) meshGroupQty[seg.len] = 0;
+                            meshGroupQty[seg.len]++;
                         });
 
                         // Horizontal flat bars
                         if (meshFbMark) {
-                            Object.keys(meshGroups).forEach(suffix => {
-                                const group = meshGroups[suffix];
+                            spanLengths.forEach(len => {
+                                const q = meshGroupQty[len] || 1;
                                 bomItems.push({
-                                    mark: group.hMark,
+                                    mark: hfbMarks[len],
                                     remark: "MESH FRAME HORIZ",
                                     desc: `FB 1"x1/8"`,
-                                    qty: 2 * group.qty,
-                                    len: formatFraction(group.len),
+                                    qty: 2 * q,
+                                    len: formatFraction(len),
                                     shape: 'FLAT_BAR',
                                     size: '1"x1/8"',
-                                    len_dec: group.len
+                                    len_dec: len
                                 });
                             });
                         }
@@ -13352,7 +14539,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (vertQty > 0) {
                                 const fbVertLen = fbHeight - 2.0;
                                 bomItems.push({
-                                    mark: meshFbMark + "V",
+                                    mark: vertFbMark,
                                     remark: "MESH FRAME VERT",
                                     desc: `FB 1"x1/8"`,
                                     qty: vertQty,
@@ -13371,18 +14558,18 @@ document.addEventListener('DOMContentLoaded', () => {
                             const meshWireD = vals.meshWireD !== undefined ? vals.meshWireD : 0.135;
                             const wwmSize = `${meshGridW}x${meshGridH}x${meshWireD} x ${formatFraction(fbHeight)}`;
 
-                            Object.keys(meshGroups).forEach(suffix => {
-                                const group = meshGroups[suffix];
+                            spanLengths.forEach(len => {
+                                const q = meshGroupQty[len] || 1;
                                 const wwmDesc = `WWM ${meshGridW}x${meshGridH}x${meshWireD} x ${formatFraction(fbHeight)}`;
                                 bomItems.push({
-                                    mark: group.pMark,
+                                    mark: meshPanelMarks[len],
                                     remark: "WWM WIRE MESH",
                                     desc: wwmDesc,
-                                    qty: group.qty,
-                                    len: formatFraction(group.len),
+                                    qty: q,
+                                    len: formatFraction(len),
                                     shape: 'WWM',
                                     size: wwmSize,
-                                    len_dec: group.len
+                                    len_dec: len
                                 });
                             });
                         }
@@ -13747,7 +14934,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         dynamicInputs.querySelectorAll('input').forEach(inp => {
             const id = inp.id.replace('inp-', '');
-            vals[id] = (inp.type === 'text') ? inp.value : (parseFloat(inp.value) || 0);
+            vals[id] = (inp.type === 'checkbox') ? (inp.checked ? 'yes' : 'no') : ((inp.type === 'text') ? inp.value : (parseFloat(inp.value) || 0));
         });
         dynamicInputs.querySelectorAll('select').forEach(sel => {
             vals[sel.id.replace('inp-', '')] = sel.value;
@@ -14384,7 +15571,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const vals = {};
         dynamicInputs.querySelectorAll('input').forEach(inp => {
             const id = inp.id.replace('inp-', '');
-            vals[id] = (inp.type === 'text') ? inp.value : (parseFloat(inp.value) || 0);
+            vals[id] = (inp.type === 'checkbox') ? (inp.checked ? 'yes' : 'no') : ((inp.type === 'text') ? inp.value : (parseFloat(inp.value) || 0));
         });
         dynamicInputs.querySelectorAll('select').forEach(sel => {
             vals[sel.id.replace('inp-', '')] = sel.value;
@@ -15832,7 +17019,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const vals = {};
         dynamicInputs.querySelectorAll('input').forEach(inp => {
             const id = inp.id.replace('inp-', '');
-            vals[id] = (inp.type === 'text') ? inp.value : (parseFloat(inp.value) || 0);
+            vals[id] = (inp.type === 'checkbox') ? (inp.checked ? 'yes' : 'no') : ((inp.type === 'text') ? inp.value : (parseFloat(inp.value) || 0));
         });
         dynamicInputs.querySelectorAll('select').forEach(sel => {
             vals[sel.id.replace('inp-', '')] = sel.value;
@@ -16286,42 +17473,46 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             // --- VERTICAL DIMENSIONS (LEFT for Left Return, RIGHT for Main/Right Return) ---
+            const isSpecialLeftReturn = (panelType === 'leftReturn' && (style === 'villa' || style === 'urban' || style === 'villa_custom' || style === 'urban_custom' || style === 'villa_balcony' || style === 'urban_balcony'));
+            const vertDimX = isSpecialLeftReturn ? 0 : vals.length;
+            const vertDimMult = isSpecialLeftReturn ? -1 : 1;
+            
             // Vertical dimension for the top gap on the right side
             const hasMid = (style === 'executive' || style === 'villa_balcony' || style === 'villa_custom' || style === 'executive_custom' || (style.includes('custom') && midRailType !== 'none'));
             const isMesh = (style === 'urban_balcony' || style === 'villa_balcony' || style === 'urban_custom' || style === 'villa_custom');
             if (hasMid) {
                 const yStart = pHeight - topH - midRailGap;
                 const yEnd = pHeight - topH;
-                drawViewportDimension(vals.length, yStart, vals.length, yEnd, 8, formatFraction(midRailGap), "middle", "dim-vert-right-top-gap");
+                drawViewportDimension(vertDimX, yStart, vertDimX, yEnd, 8 * vertDimMult, formatFraction(midRailGap), "middle", "dim-vert-right-top-gap");
 
                 // Picket Height
                 const yStart_picket = botY + botH;
                 const yEnd_picket = pHeight - topH - midRailGap - midH;
                 const picketH = yEnd_picket - yStart_picket;
                 const dimId = isMesh ? "dim-vert-right-mesh-height" : "dim-vert-right-picket-height";
-                drawViewportDimension(vals.length, yStart_picket, vals.length, yEnd_picket, 8, formatFraction(picketH), "middle", dimId);
+                drawViewportDimension(vertDimX, yStart_picket, vertDimX, yEnd_picket, 8 * vertDimMult, formatFraction(picketH), "middle", dimId);
 
                 // Fence Height (Column 2)
-                drawViewportDimension(vals.length, botY, vals.length, pHeight, 16, formatFraction(fHeight), "middle", "dim-vert-right-fence-height");
+                drawViewportDimension(vertDimX, botY, vertDimX, pHeight, 16 * vertDimMult, formatFraction(fHeight), "middle", "dim-vert-right-fence-height");
             } else {
                 // Picket/Mesh Height (Column 1 when no mid rail)
                 const yStart_picket = botY + botH;
                 const yEnd_picket = pHeight - topH;
                 const picketH = yEnd_picket - yStart_picket;
                 const dimId = isMesh ? "dim-vert-right-mesh-height" : "dim-vert-right-picket-height";
-                drawViewportDimension(vals.length, yStart_picket, vals.length, yEnd_picket, 8, formatFraction(picketH), "middle", dimId);
+                drawViewportDimension(vertDimX, yStart_picket, vertDimX, yEnd_picket, 8 * vertDimMult, formatFraction(picketH), "middle", dimId);
 
                 // Fence Height (Column 2)
-                drawViewportDimension(vals.length, botY, vals.length, pHeight, 16, formatFraction(fHeight), "middle", "dim-vert-right-fence-height");
+                drawViewportDimension(vertDimX, botY, vertDimX, pHeight, 16 * vertDimMult, formatFraction(fHeight), "middle", "dim-vert-right-fence-height");
             }
 
             // Column 2: Bottom Gap (bottom of runner to bottom of post) in all styles
             if (botY > 0.01) {
-                drawViewportDimension(vals.length, 0, vals.length, botY, 16, formatFraction(botY), "middle", "dim-vert-right-bot-gap");
+                drawViewportDimension(vertDimX, 0, vertDimX, botY, 16 * vertDimMult, formatFraction(botY), "middle", "dim-vert-right-bot-gap");
             }
 
             // Column 3: Overall Post Height (bottom of post to top of top runner) in all styles
-            drawViewportDimension(vals.length, 0, vals.length, pHeight, 24, formatFraction(pHeight), "middle", "dim-vert-right-overall-height");
+            drawViewportDimension(vertDimX, 0, vertDimX, pHeight, 24 * vertDimMult, formatFraction(pHeight), "middle", "dim-vert-right-overall-height");
 
             // --- VERTICAL DIMENSIONS (LEFT) ---
             if (midPostCount > 0) {
@@ -16505,19 +17696,20 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } else if (cat === 'rail_catalog') {
             const style = vals.railStyle || 'classical';
+            const props = getResolvedPanelProperties(vals, style);
             const isHardcodedStyle = (style === 'classical' || style === 'executive' || style === 'urban_balcony' || style === 'villa_balcony');
-            let pHeight = isHardcodedStyle ? 45.75 : (vals.postHeight || 36);
-            let fHeight = isHardcodedStyle ? 41.0 : (vals.fenceHeight || 36);
-            let topH = isHardcodedStyle ? 1.5 : getProfileDimension(vals.topRailType, vals.topRailSize, vals.topRailH || 1.5);
-            let botH = isHardcodedStyle ? 1.5 : getProfileDimension(vals.botRailType, vals.botRailSize, vals.botRailH || 1.5);
-            let midH = (style === 'classical') ? 0 : (isHardcodedStyle ? 1.5 : getProfileDimension(vals.midRailType, vals.midRailSize, vals.midRailH || 1.5));
-            postW = isHardcodedStyle ? 1.5 : getPicketDimension(vals.postType, vals.postSize, vals.postW || 1.5);
-            let picketW = (style === 'classical' || style === 'executive') ? 0.5 : getPicketDimension(vals.picketType, vals.picketSize, vals.picketW || 0.5);
-            let picketSpacing = (style === 'classical') ? 4.0 : (style === 'executive' ? 4.0 : (vals.picketSpacing || 4.0));
+            let pHeight = props ? props.pHeight : (isHardcodedStyle ? 45.75 : (parseFloat(vals.postHeight) || 36));
+            let fHeight = props ? props.fHeight : (isHardcodedStyle ? 41.0 : (parseFloat(vals.fenceHeight) || 36));
+            let topH = props ? props.topRailH : (isHardcodedStyle ? 1.5 : getProfileDimension(vals.topRailType, vals.topRailSize, vals.topRailH || 1.5));
+            let botH = props ? props.botRailH : (isHardcodedStyle ? 1.5 : getProfileDimension(vals.botRailType, vals.botRailSize, vals.botRailH || 1.5));
+            let midH = props ? props.midRailH : ((style === 'classical') ? 0 : (isHardcodedStyle ? 1.5 : getProfileDimension(vals.midRailType, vals.midRailSize, vals.midRailH || 1.5)));
+            postW = props ? props.postW : (isHardcodedStyle ? 1.5 : getPicketDimension(vals.postType, vals.postSize, vals.postW || 1.5));
+            let picketW = props ? props.picketW : ((style === 'classical' || style === 'executive') ? 0.5 : getPicketDimension(vals.picketType, vals.picketSize, vals.picketW || 0.5));
+            let picketSpacing = props ? props.picketSpacing : ((style === 'classical') ? 4.0 : (style === 'executive' ? 4.0 : (parseFloat(vals.picketSpacing) || 4.0)));
             midPostCount = (vals.midPosts === 'default' || vals.midPosts === 'yes') ? Math.max(0, Math.ceil((vals.originalLength || vals.length) / 48) - 1) : ((vals.midPosts === 'custom' || vals.midPosts === 'custom_standard') ? (parseInt(vals.midPostCount) || 0) : 0);
             let botY = pHeight - fHeight;
-            let midRailGap = (style === 'classical') ? 0 : (isHardcodedStyle ? 3.0 : (vals.midRailGap || 12.0));
-            let picketType = (style === 'classical' || style === 'executive') ? 'hss_rect' : ((style === 'urban_balcony' || style === 'villa_balcony' || style === 'urban_custom' || style === 'villa_custom') ? 'none' : (vals.picketType || 'hss_rect'));
+            let midRailGap = props ? props.midRailGap : ((style === 'classical') ? 0 : (isHardcodedStyle ? 3.0 : (parseFloat(vals.midRailGap) || 12.0)));
+            let picketType = props ? props.picketType : ((style === 'classical' || style === 'executive') ? 'hss_rect' : ((style === 'urban_balcony' || style === 'villa_balcony' || style === 'urban_custom' || style === 'villa_custom') ? 'none' : (vals.picketType || 'hss_rect')));
 
             picketMark = getMark(picketType !== 'none');
             const meshFbMark = getMark(style === 'urban_balcony' || style === 'villa_balcony' || style === 'urban_custom' || style === 'villa_custom');
@@ -16531,7 +17723,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // 1. Top Rail
             if (topMark) {
                 const cyTop = pHeight - topH / 2;
-                drawViewportLeader(vals.length * 0.25, cyTop, leaderSide, topMark, "leader-top-rail");
+                const isSpecialLeftReturn = (panelType === 'leftReturn' && (style === 'villa' || style === 'urban' || style === 'villa_custom' || style === 'urban_custom' || style === 'villa_balcony' || style === 'urban_balcony'));
+                const topLeaderX = isSpecialLeftReturn ? (vals.length * 0.75) : (vals.length * 0.25);
+                drawViewportLeader(topLeaderX, cyTop, leaderSide, topMark, "leader-top-rail");
             }
             // 2. Bottom Rail
             if (botMark && railSpans.bottomSegments.length > 0) {
@@ -16621,7 +17815,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     const rawPickX = pPositions[idx];
                     const pickCx = rawPickX + pickW / 2;
                     const picketBottomY = botY + botH;
-                    const cyPick = picketBottomY + 6.0;
+                    const openingH = Math.max(2, pHeight - topH - botY - botH);
+                    const cyPick = picketBottomY + openingH * 0.5;
                     drawViewportLeader(pickCx, cyPick, leaderSide, picketMark, "leader-pickets");
                 }
             }
@@ -17215,6 +18410,16 @@ document.addEventListener('DOMContentLoaded', () => {
         
         bpConfig.plateShape = shapeSelect.value;
         
+        const connTypeSelect = document.getElementById('inp-bp-connectionType');
+        if (connTypeSelect) {
+            bpConfig.connectionType = connTypeSelect.value;
+        }
+        const offsetInp = document.getElementById('inp-bp-wallMountOffset');
+        if (offsetInp) {
+            const parsedVal = parseFloat(offsetInp.value);
+            bpConfig.wallMountOffset = (!isNaN(parsedVal) && parsedVal >= 0) ? parsedVal : 1.0;
+        }
+        
         const qiwPlateTypeSelect = document.getElementById('inp-bp-qiwPlateType');
         if (qiwPlateTypeSelect) {
             bpConfig.qiwPlateType = qiwPlateTypeSelect.value;
@@ -17277,14 +18482,60 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function createWallMountBasePlateModel(bpConfig) {
+        if (!bpConfig) bpConfig = getDefaultBasePlateConfig();
+        const model = { models: {}, paths: {} };
+        
+        const shape = bpConfig.plateShape;
+        const bpW = (shape === 'qiw_standard') ? (bpConfig.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpConfig.width) || 6.0);
+        const bpH = (shape === 'qiw_standard') ? (bpConfig.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpConfig.height) || 6.0);
+        const offsetVal = bpConfig.wallMountOffset !== undefined ? parseFloat(bpConfig.wallMountOffset) || 0 : 1.0;
+        const postW = 1.5;
+        const postTopY = bpH + 4.0;
+        const postBotY = -offsetVal;
+
+        model.models.post = {
+            paths: {
+                left: new makerjs.paths.Line([-postW / 2, postBotY], [-postW / 2, postTopY]),
+                right: new makerjs.paths.Line([postW / 2, postBotY], [postW / 2, postTopY]),
+                bottom: new makerjs.paths.Line([-postW / 2, postBotY], [postW / 2, postBotY])
+            }
+        };
+
+        model.models.plate = {
+            paths: {
+                left: new makerjs.paths.Line([-bpW / 2, 0], [-bpW / 2, bpH]),
+                right: new makerjs.paths.Line([bpW / 2, 0], [bpW / 2, bpH]),
+                bottom: new makerjs.paths.Line([-bpW / 2, 0], [bpW / 2, 0]),
+                top: new makerjs.paths.Line([-bpW / 2, bpH], [bpW / 2, bpH])
+            }
+        };
+
+        model.models.holes = { paths: {} };
+        const holes = getCustomBasePlateHoleCoordinates(bpConfig);
+        holes.forEach((h, idx) => {
+            const hx = -bpW / 2 + h.x;
+            const hy = h.y;
+            const r = h.diameter / 2;
+            model.models.holes.paths['hole_' + idx] = new makerjs.paths.Circle([hx, hy], r);
+        });
+
+        return model;
+    }
+
     function updateBasePlateCADPreview(bpConfig) {
+        if (!bpConfig) bpConfig = getDefaultBasePlateConfig();
         const basePlateModel = createCustomBasePlateModel(bpConfig);
         const svg = CadEngine.renderSVG(basePlateModel);
         svgContainer.innerHTML = svg;
         
         const dimText = document.getElementById('dim-text');
         if (dimText) {
-            if (bpConfig.plateShape === 'rect') {
+            const isWall = bpConfig.connectionType === 'wall_mount';
+            const mark = bpConfig.plateShape === 'qiw_standard' ? (bpConfig.qiwPlateType || 'QBP54') : resolveBasePlatePieceMark(bpConfig);
+            if (isWall) {
+                dimText.textContent = `Wall Mount Base Plate: ${mark} (Offset: ${bpConfig.wallMountOffset !== undefined ? bpConfig.wallMountOffset : 1.0}")`;
+            } else if (bpConfig.plateShape === 'rect') {
                 dimText.textContent = `Base Plate: ${bpConfig.width}" x ${bpConfig.height}" x ${bpConfig.thickness}" [Rect]`;
             } else if (bpConfig.plateShape === 'qiw_standard') {
                 dimText.textContent = `Base Plate: ${bpConfig.qiwPlateType || 'QBP43'}`;
@@ -17308,6 +18559,18 @@ document.addEventListener('DOMContentLoaded', () => {
         doc.rect(7, 7, 283, 196, 'S');
         
         const blockY = 175;
+        
+        // --- DRAW GENERAL NOTE BOX (SNAP 3 STYLE) ---
+        const noteBoxX = 202.5;
+        const noteBoxW = 87.5; // Spans right title block
+        const noteBoxY = blockY - 6.0;
+        const noteBoxH = 6.0;
+        doc.setLineWidth(0.35);
+        doc.setDrawColor(0, 0, 0);
+        doc.rect(noteBoxX, noteBoxY, noteBoxW, noteBoxH, 'S');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.text("NOTE: ALL MATERIAL ON CENTER U.N.O.", noteBoxX + noteBoxW / 2, noteBoxY + 4.2, { align: "center" });
         doc.rect(7, blockY, 68, 28, 'S');
         doc.rect(75, blockY, 70, 28, 'S');
         doc.rect(145, blockY, 120, 28, 'S');
@@ -17347,7 +18610,7 @@ document.addEventListener('DOMContentLoaded', () => {
         doc.text("ENG", 141, blockY + 7.5, { align: "center" });
         
         const pieceMark = resolveBasePlatePieceMark(bpConfig);
-        const displayMark = bpConfig.plateShape === 'qiw_standard' ? (bpConfig.qiwPlateType || 'QBP43') : pieceMark;
+        const displayMark = pieceMark || 'bp1';
         
         // Center Stamp block (width 120)
         doc.setFont('helvetica', 'bold');
@@ -17400,182 +18663,317 @@ document.addEventListener('DOMContentLoaded', () => {
         doc.setFontSize(6);
         doc.text(sheetDate, 277.5, blockY + 25.5, { align: "center" });
         
-        const basePlateModel = createCustomBasePlateModel(bpConfig);
-        const extents = makerjs.measure.modelExtents(basePlateModel);
-        const w = extents.high[0] - extents.low[0];
-        const h = extents.high[1] - extents.low[1];
-        
-        const maxDim = Math.max(w, h, 1);
-        const scale = Math.min(100 / maxDim, 10.0);
-        
-        const cx = 148.5;
-        const cy = 91;
-        
-        basePlateModel.origin = [-(extents.low[0] + w/2), -(extents.low[1] + h/2)];
-        
-        doc.setLineWidth(0.4);
-        doc.setDrawColor(0, 0, 0);
-        const walk = (m, origin) => {
-            const mOrg = m.origin ? [parseFloat(m.origin[0]) || 0, parseFloat(m.origin[1]) || 0] : [0, 0];
-            const currentOrg = [origin[0] + mOrg[0], origin[1] + mOrg[1]];
+        const isWall = bpConfig.connectionType === 'wall_mount';
+        if (false) { // Preserved wall elevation block disabled per user directive: plate profile must remain Snap 4
+            const offsetVal = bpConfig.wallMountOffset !== undefined ? parseFloat(bpConfig.wallMountOffset) || 0 : 1.0;
+            const shape = bpConfig.plateShape;
+            const bpW = (shape === 'qiw_standard') ? (bpConfig.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpConfig.width) || 6.0);
+            const bpH = (shape === 'qiw_standard') ? (bpConfig.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpConfig.height) || 6.0);
+            const postW = 1.5;
+
+            const cx = 148.5;
+            const cy = 92;
+            const scale = 11.0; // mm per inch
+
+            const postBotY = cy + (bpH/2 + offsetVal) * scale;
+            const postTopY = cy - (bpH/2 + 2.5) * scale;
+            const postLeftX = cx - (postW/2) * scale;
+            const postRightX = cx + (postW/2) * scale;
+
+            // Draw post outline
+            doc.setLineWidth(0.35);
+            doc.setDrawColor(0, 0, 0);
+            doc.line(postLeftX, postTopY, postLeftX, postBotY);
+            doc.line(postRightX, postTopY, postRightX, postBotY);
+            doc.line(postLeftX, postBotY, postRightX, postBotY);
+
+            // Draw center line
+            doc.setLineWidth(0.12);
+            doc.setLineDashPattern([2, 2], 0);
+            doc.line(cx, postTopY - 4, cx, postBotY + 12);
+            doc.setLineDashPattern([], 0);
+
+            // Draw plate
+            const plateLeftX = cx - (bpW/2) * scale;
+            const plateRightX = cx + (bpW/2) * scale;
+            const plateTopY = cy - (bpH/2) * scale;
+            const plateBotY = cy + (bpH/2) * scale;
+
+            doc.setLineWidth(0.4);
+            doc.rect(plateLeftX, plateTopY, bpW * scale, bpH * scale, 'S');
+
+            // Draw holes (filled circles)
+            const holes = getCustomBasePlateHoleCoordinates(bpConfig);
+            doc.setFillColor(0, 0, 0);
+            holes.forEach(h => {
+                const hx = plateLeftX + h.x * scale;
+                const hy = plateBotY - h.y * scale;
+                const hr = (h.diameter / 2) * scale;
+                doc.circle(hx, hy, hr, 'F');
+            });
+
+            // Dimensioning (Snap 2 style)
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7.5);
+            doc.setLineWidth(0.18);
+
+            // 1. Offset Dimension (pointing gap between postBotY and plateBotY)
+            const offDimX = plateLeftX - 16;
+            doc.line(offDimX, plateBotY, offDimX, postBotY);
+            doc.line(offDimX - 2, plateBotY, offDimX + 2, plateBotY);
+            doc.line(offDimX - 2, postBotY, offDimX + 2, postBotY);
+            doc.line(plateLeftX - 2, plateBotY, offDimX - 4, plateBotY);
+            doc.line(postLeftX - 2, postBotY, offDimX - 4, postBotY);
+            doc.text(formatFraction(offsetVal), offDimX - 2.5, (plateBotY + postBotY) / 2 + 2.5, { align: 'right' });
+
+            // 2. Plate Hole Vertical Height Dimension (e.g. 4")
+            if (holes.length >= 4) {
+                const topHoleY = plateTopY + 0.5 * scale;
+                const botHoleY = plateBotY - 0.5 * scale;
+                const holeDimHeight = formatFraction(bpH - 1.0);
+                doc.line(offDimX, topHoleY, offDimX, botHoleY);
+                doc.line(offDimX - 2, topHoleY, offDimX + 2, topHoleY);
+                doc.line(offDimX - 2, botHoleY, offDimX + 2, botHoleY);
+                doc.line(plateLeftX - 2, topHoleY, offDimX - 4, topHoleY);
+                doc.line(plateLeftX - 2, botHoleY, offDimX - 4, botHoleY);
+                doc.text(holeDimHeight, offDimX - 2.5, (topHoleY + botHoleY) / 2 + 2.5, { align: 'right' });
+            }
+
+            // 3. Horizontal Dimensions (Bottom: 2", 2", 3/4")
+            const dimYBot = postBotY + 10;
+            const leftHoleX = plateLeftX + 0.5 * scale;
+            const rightHoleX = plateRightX - 0.5 * scale;
+
+            // 2" left hole to post center
+            doc.line(leftHoleX, dimYBot, cx, dimYBot);
+            doc.line(leftHoleX, dimYBot - 2, leftHoleX, dimYBot + 2);
+            doc.line(cx, dimYBot - 2, cx, dimYBot + 2);
+            doc.line(leftHoleX, postBotY + 2, leftHoleX, dimYBot + 2.5);
+            doc.text(formatFraction(bpW / 2 - 0.5), (leftHoleX + cx) / 2, dimYBot + 6.5, { align: 'center' });
+
+            // 2" post center to right hole
+            doc.line(cx, dimYBot, rightHoleX, dimYBot);
+            doc.line(rightHoleX, dimYBot - 2, rightHoleX, dimYBot + 2);
+            doc.line(rightHoleX, postBotY + 2, rightHoleX, dimYBot + 2.5);
+            doc.text(formatFraction(bpW / 2 - 0.5), (cx + rightHoleX) / 2, dimYBot + 6.5, { align: 'center' });
+
+            // 4. Leaders (Hole Callout & Piece Mark)
+            const drawArrowheadLocal = (x, y, angle, size = 1.2) => {
+                const x1 = x - size * Math.cos(angle - Math.PI / 6);
+                const y1 = y - size * Math.sin(angle - Math.PI / 6);
+                const x2 = x - size * Math.cos(angle + Math.PI / 6);
+                const y2 = y - size * Math.sin(angle + Math.PI / 6);
+                doc.setFillColor(0, 0, 0);
+                doc.triangle(x, y, x1, y1, x2, y2, 'F');
+            };
+
+            // Hole leader pointing to top-right hole
+            const trHoleX = plateRightX - 0.5 * scale;
+            const trHoleY = plateTopY + 0.5 * scale;
+            const hLlx = trHoleX + 14;
+            const hLly = trHoleY - 10;
+            const hLlxExt = hLlx + 14;
+            doc.line(trHoleX, trHoleY, hLlx, hLly);
+            doc.line(hLlx, hLly, hLlxExt, hLly);
+            drawArrowheadLocal(trHoleX, trHoleY, Math.atan2(trHoleY - hLly, trHoleX - hLlx), 1.2);
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8.5);
+            const holeDiameter = holes.length > 0 ? holes[0].diameter : 0.5;
+            const holeDesc = `${holes.length} - ${formatFraction(holeDiameter).replace(/"/g, '')}" \u00D8`;
+            doc.text(holeDesc, hLlx + 1, hLly - 1.5, { align: 'left' });
+
+            // Piece Mark leader pointing to right edge of plate
+            const pmPx = plateRightX;
+            const pmPy = cy + 2 * scale;
+            const pmLx = pmPx + 14;
+            const pmLy = pmPy + 10;
+            const pmLxExt = pmLx + 14;
+            doc.line(pmPx, pmPy, pmLx, pmLy);
+            doc.line(pmLx, pmLy, pmLxExt, pmLy);
+            drawArrowheadLocal(pmPx, pmPy, Math.atan2(pmPy - pmLy, pmPx - pmLx), 1.2);
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(11);
+            doc.text(displayMark, pmLx + 1, pmLy + 3.5, { align: 'left' });
+        } else {
+            const basePlateModel = createCustomBasePlateModel(bpConfig);
+            const extents = makerjs.measure.modelExtents(basePlateModel);
+            const w = extents.high[0] - extents.low[0];
+            const h = extents.high[1] - extents.low[1];
             
-            if (m.paths) {
-                for (const pk in m.paths) {
-                    const path = m.paths[pk];
-                    if (path.type === 'line') {
-                        const x1 = cx + (currentOrg[0] + path.origin[0]) * scale;
-                        const y1 = cy - (currentOrg[1] + path.origin[1]) * scale;
-                        const x2 = cx + (currentOrg[0] + path.end[0]) * scale;
-                        const y2 = cy - (currentOrg[1] + path.end[1]) * scale;
-                        doc.line(x1, y1, x2, y2);
-                    } else if (path.type === 'circle') {
-                        const x = cx + (currentOrg[0] + path.origin[0]) * scale;
-                        const y = cy - (currentOrg[1] + path.origin[1]) * scale;
-                        const r = path.radius * scale;
-                        doc.circle(x, y, r, 'S');
-                    } else if (path.type === 'arc') {
-                        const x = cx + (currentOrg[0] + path.origin[0]) * scale;
-                        const y = cy - (currentOrg[1] + path.origin[1]) * scale;
-                        const r = path.radius * scale;
-                        const startRad = (path.startAngle * Math.PI) / 180;
-                        const endRad = (path.endAngle * Math.PI) / 180;
-                        doc.arc(x, y, r, startRad, endRad, false);
+            const maxDim = Math.max(w, h, 1);
+            const scale = Math.min(100 / maxDim, 10.0);
+            
+            const cx = 148.5;
+            const cy = 91;
+            
+            basePlateModel.origin = [-(extents.low[0] + w/2), -(extents.low[1] + h/2)];
+            
+            doc.setLineWidth(0.4);
+            doc.setDrawColor(0, 0, 0);
+            const walk = (m, origin) => {
+                const mOrg = m.origin ? [parseFloat(m.origin[0]) || 0, parseFloat(m.origin[1]) || 0] : [0, 0];
+                const currentOrg = [origin[0] + mOrg[0], origin[1] + mOrg[1]];
+                
+                if (m.paths) {
+                    for (const pk in m.paths) {
+                        const path = m.paths[pk];
+                        if (path.type === 'line') {
+                            const x1 = cx + (currentOrg[0] + path.origin[0]) * scale;
+                            const y1 = cy - (currentOrg[1] + path.origin[1]) * scale;
+                            const x2 = cx + (currentOrg[0] + path.end[0]) * scale;
+                            const y2 = cy - (currentOrg[1] + path.end[1]) * scale;
+                            doc.line(x1, y1, x2, y2);
+                        } else if (path.type === 'circle') {
+                            const x = cx + (currentOrg[0] + path.origin[0]) * scale;
+                            const y = cy - (currentOrg[1] + path.origin[1]) * scale;
+                            const r = path.radius * scale;
+                            doc.circle(x, y, r, 'S');
+                        } else if (path.type === 'arc') {
+                            const x = cx + (currentOrg[0] + path.origin[0]) * scale;
+                            const y = cy - (currentOrg[1] + path.origin[1]) * scale;
+                            const r = path.radius * scale;
+                            const startRad = (path.startAngle * Math.PI) / 180;
+                            const endRad = (path.endAngle * Math.PI) / 180;
+                            doc.arc(x, y, r, startRad, endRad, false);
+                        }
                     }
                 }
-            }
-            if (m.models) {
-                for (const mk in m.models) {
-                    walk(m.models[mk], currentOrg);
+                if (m.models) {
+                    for (const mk in m.models) {
+                        walk(m.models[mk], currentOrg);
+                    }
                 }
-            }
-        };
-        walk(basePlateModel, [0, 0]);
-        
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7.5);
-        doc.setLineWidth(0.2);
-        
-        const wx1 = cx - (w / 2) * scale;
-        const wy = cy + (h / 2) * scale + 15;
-        const wx2 = cx + (w / 2) * scale;
-        doc.line(wx1, wy, wx2, wy);
-        doc.line(wx1, wy - 3, wx1, wy + 3);
-        doc.line(wx2, wy - 3, wx2, wy + 3);
-        doc.line(wx1, cy + (h / 2) * scale + 2, wx1, wy + 2);
-        doc.line(wx2, cy + (h / 2) * scale + 2, wx2, wy + 2);
-        doc.text(formatFraction(w), (wx1 + wx2)/2, wy - 2, { align: 'center' });
-        
-        const hx = cx - (w / 2) * scale - 15;
-        const hy1 = cy + (h / 2) * scale;
-        const hy2 = cy - (h / 2) * scale;
-        doc.line(hx, hy1, hx, hy2);
-        doc.line(hx - 3, hy1, hx + 3, hy1);
-        doc.line(hx - 3, hy2, hx + 3, hy2);
-        doc.line(cx - (w / 2) * scale - 2, hy1, hx - 2, hy1);
-        doc.line(cx - (w / 2) * scale - 2, hy2, hx - 2, hy2);
-        doc.text(formatFraction(h), hx - 2, (hy1 + hy2)/2 + 1.5, { align: 'right' });
+            };
+            walk(basePlateModel, [0, 0]);
+            
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7.5);
+            doc.setLineWidth(0.2);
+            
+            const wx1 = cx - (w / 2) * scale;
+            const wy = cy + (h / 2) * scale + 15;
+            const wx2 = cx + (w / 2) * scale;
+            doc.line(wx1, wy, wx2, wy);
+            doc.line(wx1, wy - 3, wx1, wy + 3);
+            doc.line(wx2, wy - 3, wx2, wy + 3);
+            doc.line(wx1, cy + (h / 2) * scale + 2, wx1, wy + 2);
+            doc.line(wx2, cy + (h / 2) * scale + 2, wx2, wy + 2);
+            doc.text(formatFraction(w), (wx1 + wx2)/2, wy - 2, { align: 'center' });
+            
+            const hx = cx - (w / 2) * scale - 15;
+            const hy1 = cy + (h / 2) * scale;
+            const hy2 = cy - (h / 2) * scale;
+            doc.line(hx, hy1, hx, hy2);
+            doc.line(hx - 3, hy1, hx + 3, hy1);
+            doc.line(hx - 3, hy2, hx + 3, hy2);
+            doc.line(cx - (w / 2) * scale - 2, hy1, hx - 2, hy1);
+            doc.line(cx - (w / 2) * scale - 2, hy2, hx - 2, hy2);
+            doc.text(formatFraction(h), hx - 2, (hy1 + hy2)/2 + 1.5, { align: 'right' });
 
-        // Add corner margin dimensions
-        const margins = getBasePlateCornerMargins(bpConfig);
-        if (margins.targetHole) {
-            const marginValX = margins.marginX;
-            const marginValY = margins.marginY;
+            // Add corner margin dimensions
+            const margins = getBasePlateCornerMargins(bpConfig);
+            if (margins.targetHole) {
+                const marginValX = margins.marginX;
+                const marginValY = margins.marginY;
+                
+                const plateLeftX = cx - (w / 2) * scale;
+                const plateBotY = cy + (h / 2) * scale;
+                const hx_center = cx + (margins.targetHole.x - margins.bounds.minX - w/2) * scale;
+                const hy_center = cy - (margins.targetHole.y - margins.bounds.minY - h/2) * scale;
+                
+                // X Margin (horizontal dimension line at plateBotY + 8)
+                const xDimY = plateBotY + 8;
+                doc.line(plateLeftX, xDimY, hx_center, xDimY);
+                doc.line(plateLeftX, xDimY - 1.5, plateLeftX, xDimY + 1.5);
+                doc.line(hx_center, xDimY - 1.5, hx_center, xDimY + 1.5);
+                doc.line(hx_center, plateBotY + 1, hx_center, xDimY + 1); // Extension line to hole center X
+                
+                // Draw ticks
+                doc.line(plateLeftX - 1, xDimY - 1, plateLeftX + 1, xDimY + 1);
+                doc.line(hx_center - 1, xDimY - 1, hx_center + 1, xDimY + 1);
+                
+                doc.text(formatFraction(marginValX), (plateLeftX + hx_center) / 2, xDimY - 1.5, { align: 'center' });
+                
+                // Y Margin (vertical dimension line at plateLeftX - 8)
+                const yDimX = plateLeftX - 8;
+                doc.line(yDimX, plateBotY, yDimX, hy_center);
+                doc.line(yDimX - 1.5, plateBotY, yDimX + 1.5, plateBotY);
+                doc.line(yDimX - 1.5, hy_center, yDimX + 1.5, hy_center);
+                doc.line(plateLeftX - 1, hy_center, yDimX - 1, hy_center); // Extension line to hole center Y
+                
+                // Draw ticks
+                doc.line(yDimX - 1, plateBotY - 1, yDimX + 1, plateBotY + 1);
+                doc.line(yDimX - 1, hy_center - 1, yDimX + 1, hy_center + 1);
+                
+                doc.text(formatFraction(marginValY), yDimX - 1.5, (plateBotY + hy_center) / 2 + 1.2, { align: 'right' });
+            }
             
-            const plateLeftX = cx - (w / 2) * scale;
-            const plateBotY = cy + (h / 2) * scale;
-            const hx_center = cx + (margins.targetHole.x - margins.bounds.minX - w/2) * scale;
-            const hy_center = cy - (margins.targetHole.y - margins.bounds.minY - h/2) * scale;
+            const drawArrowheadLocal = (x, y, angle, size = 1.2) => {
+                const x1 = x - size * Math.cos(angle - Math.PI / 6);
+                const y1 = y - size * Math.sin(angle - Math.PI / 6);
+                const x2 = x - size * Math.cos(angle + Math.PI / 6);
+                const y2 = y - size * Math.sin(angle + Math.PI / 6);
+                doc.setFillColor(0, 0, 0);
+                doc.triangle(x, y, x1, y1, x2, y2, 'F');
+            };
+     
+            const holes = getCustomBasePlateHoleCoordinates(bpConfig);
+            if (holes.length > 0) {
+                const firstHole = holes[0];
+                const bounds = bpConfig.plateShape === 'rect' 
+                    ? { minX: 0, minY: 0 } 
+                    : (bpConfig.plateShape === 'qiw_standard' ? { minX: 0, minY: 0 } : getPolyBounds(bpConfig.polyVerts));
+                const hpx = cx + (firstHole.x - bounds.minX - w/2) * scale;
+                const hpy = cy - (firstHole.y - bounds.minY - h/2) * scale;
+                
+                // Point the hole leader rightwards (outside the plate and clear of dimensions)
+                const lx = hpx + 15;
+                const ly = hpy - 10;
+                const lxExt = lx + 12;
+                doc.line(hpx, hpy, lx, ly);
+                doc.line(lx, ly, lxExt, ly);
+                
+                const holeAngle = Math.atan2(hpy - ly, hpx - lx);
+                drawArrowheadLocal(hpx, hpy, holeAngle, 1.2);
+                
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(6.5);
+                const holeDesc = bpConfig.holeType === 'slotted'
+                    ? `(${holes.length}) ${formatFraction(firstHole.diameter)} x ${formatFraction(bpConfig.slotLength)} SLOT`
+                    : `(${holes.length}) \u00D8 ${formatFraction(firstHole.diameter)} HOLES`;
+                doc.text(holeDesc, lx + 1, ly - 1.5, { align: 'left' });
+            }
             
-            // X Margin (horizontal dimension line at plateBotY + 8)
-            const xDimY = plateBotY + 8;
-            doc.line(plateLeftX, xDimY, hx_center, xDimY);
-            doc.line(plateLeftX, xDimY - 1.5, plateLeftX, xDimY + 1.5);
-            doc.line(hx_center, xDimY - 1.5, hx_center, xDimY + 1.5);
-            doc.line(hx_center, plateBotY + 1, hx_center, xDimY + 1); // Extension line to hole center X
+            // Point the piece mark leader close to the right side (rather than corner) to prevent interference
+            const pmPx = cx + (w / 2) * scale;
+            const pmPy = cy - (h / 6) * scale;
+            const pmLx = pmPx + 15;
+            const pmLy = pmPy - 10;
+            const pmLxExt = pmLx + 12;
             
-            // Draw ticks
-            doc.line(plateLeftX - 1, xDimY - 1, plateLeftX + 1, xDimY + 1);
-            doc.line(hx_center - 1, xDimY - 1, hx_center + 1, xDimY + 1);
+            doc.setLineWidth(0.2);
+            doc.line(pmPx, pmPy, pmLx, pmLy);
+            doc.line(pmLx, pmLy, pmLxExt, pmLy);
             
-            doc.text(formatFraction(marginValX), (plateLeftX + hx_center) / 2, xDimY - 1.5, { align: 'center' });
-            
-            // Y Margin (vertical dimension line at plateLeftX - 8)
-            const yDimX = plateLeftX - 8;
-            doc.line(yDimX, plateBotY, yDimX, hy_center);
-            doc.line(yDimX - 1.5, plateBotY, yDimX + 1.5, plateBotY);
-            doc.line(yDimX - 1.5, hy_center, yDimX + 1.5, hy_center);
-            doc.line(plateLeftX - 1, hy_center, yDimX - 1, hy_center); // Extension line to hole center Y
-            
-            // Draw ticks
-            doc.line(yDimX - 1, plateBotY - 1, yDimX + 1, plateBotY + 1);
-            doc.line(yDimX - 1, hy_center - 1, yDimX + 1, hy_center + 1);
-            
-            doc.text(formatFraction(marginValY), yDimX - 1.5, (plateBotY + hy_center) / 2 + 1.2, { align: 'right' });
-        }
-        
-        const drawArrowheadLocal = (x, y, angle, size = 1.2) => {
-            const x1 = x - size * Math.cos(angle - Math.PI / 6);
-            const y1 = y - size * Math.sin(angle - Math.PI / 6);
-            const x2 = x - size * Math.cos(angle + Math.PI / 6);
-            const y2 = y - size * Math.sin(angle + Math.PI / 6);
-            doc.setFillColor(0, 0, 0);
-            doc.triangle(x, y, x1, y1, x2, y2, 'F');
-        };
- 
-        const holes = getCustomBasePlateHoleCoordinates(bpConfig);
-        if (holes.length > 0) {
-            const firstHole = holes[0];
-            const bounds = bpConfig.plateShape === 'rect' 
-                ? { minX: 0, minY: 0 } 
-                : (bpConfig.plateShape === 'qiw_standard' ? { minX: 0, minY: 0 } : getPolyBounds(bpConfig.polyVerts));
-            const hpx = cx + (firstHole.x - bounds.minX - w/2) * scale;
-            const hpy = cy - (firstHole.y - bounds.minY - h/2) * scale;
-            
-            // Point the hole leader rightwards (outside the plate and clear of dimensions)
-            const lx = hpx + 15;
-            const ly = hpy - 10;
-            const lxExt = lx + 12;
-            doc.line(hpx, hpy, lx, ly);
-            doc.line(lx, ly, lxExt, ly);
-            
-            const holeAngle = Math.atan2(hpy - ly, hpx - lx);
-            drawArrowheadLocal(hpx, hpy, holeAngle, 1.2);
+            const pmAngle = Math.atan2(pmPy - pmLy, pmPx - pmLx);
+            drawArrowheadLocal(pmPx, pmPy, pmAngle, 1.2);
             
             doc.setFont('helvetica', 'bold');
-            doc.setFontSize(6.5);
-            const holeDesc = bpConfig.holeType === 'slotted'
-                ? `(${holes.length}) ${formatFraction(firstHole.diameter)} x ${formatFraction(bpConfig.slotLength)} SLOT`
-                : `(${holes.length}) \u00D8 ${formatFraction(firstHole.diameter)} HOLES`;
-            doc.text(holeDesc, lx + 1, ly - 1.5, { align: 'left' });
+            doc.setFontSize(9);
+            doc.text(displayMark, pmLx + 1, pmLy - 1.5, { align: 'left' });
         }
-        
-        // Point the piece mark leader close to the right side (rather than corner) to prevent interference
-        const pmPx = cx + (w / 2) * scale;
-        const pmPy = cy - (h / 6) * scale;
-        const pmLx = pmPx + 15;
-        const pmLy = pmPy - 10;
-        const pmLxExt = pmLx + 12;
-        
-        doc.setLineWidth(0.2);
-        doc.line(pmPx, pmPy, pmLx, pmLy);
-        doc.line(pmLx, pmLy, pmLxExt, pmLy);
-        
-        const pmAngle = Math.atan2(pmPy - pmLy, pmPx - pmLx);
-        drawArrowheadLocal(pmPx, pmPy, pmAngle, 1.2);
-        
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9);
-        doc.text(displayMark, pmLx + 1, pmLy - 1.5, { align: 'left' });
  
         // Draw a small BOM box in the top-right corner of the sheet containing piece mark and total qty
         let totalQty = 1;
         const activeSet = balconyWizardState.tempSet || balconyWizardState.sets[balconyWizardState.activeSetIdx];
         const activePanel = balconyWizardState.activePanelType;
-        const panelObj = (activePanel === 'main' || activePanel === 'loosePost') ? activeSet.main : (activePanel === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
+        const panelObj = (activePanel === 'main' || (activePanel && activePanel.startsWith('loose'))) ? activeSet.main : (activePanel === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
         if (panelObj) {
             const hasLeft = panelObj.leftPost === 'yes';
             const hasRight = panelObj.rightPost === 'yes';
-            const isLoose = (activePanel === 'loosePost');
+            const isLoose = ((activePanel && activePanel.startsWith('loose')));
             if (isLoose) {
                 totalQty = 1;
             } else {
@@ -17834,16 +19232,152 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function renderLoosePostEditor() {
+        const activeSet = balconyWizardState.tempSet || balconyWizardState.sets[balconyWizardState.activeSetIdx];
+        if (!activeSet) return;
+        const mainPanel = activeSet.main || {};
+        const style = mainPanel.railStyle || 'classical';
+        const isMeshStyle = (style === 'urban_balcony' || style === 'villa_balcony' || style === 'urban_custom' || style === 'villa_custom');
+
+        let activePanelType = balconyWizardState.activePanelType || 'loosePost';
+        if (!activePanelType.startsWith('loose')) {
+            activePanelType = isMeshStyle ? 'looseLeftPost' : 'loosePost';
+            balconyWizardState.activePanelType = activePanelType;
+        }
+
+        const currentType = activePanelType;
+
+        const extraLen = mainPanel[currentType + '_extraLen'] ?? mainPanel.looseExtraLen ?? 0;
+        const offsetX = getLoosePostOffsetX(mainPanel, currentType);
+        const offsetY = getLoosePostOffsetY(mainPanel, currentType);
+        const defaultQty = calculateScenarioADefaultQty(mainPanel, activeSet, currentType, isMeshStyle);
+        const qty = mainPanel[currentType + '_qty'] ?? mainPanel.looseQty ?? defaultQty;
+        const includeBP = mainPanel[currentType + '_includeBasePlates'] ?? mainPanel.looseIncludeBasePlates ?? mainPanel.includeBasePlates ?? 'yes';
+
+        let html = `
+            <div style="padding: 14px; background: rgba(255,255,255,0.03); border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                    <h4 style="margin:0; font-size:15px; font-weight:700; color:var(--accent-color);">Loose Post Designer</h4>
+                    <button id="btn-exit-loose-post" class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px; cursor:pointer;">← Back to Panel</button>
+                </div>
+        `;
+
+        if (isMeshStyle) {
+            const isLeft = currentType === 'looseLeftPost' || currentType === 'loosePost';
+            const isRight = currentType === 'looseRightPost';
+            html += `
+                <div style="display: flex; gap: 8px; margin-bottom: 15px;">
+                    <button id="btn-tab-loose-left" class="btn ${isLeft ? 'btn-primary' : 'btn-secondary'}" style="flex:1; font-size:12px; padding:6px; cursor:pointer;">Loose Left Post</button>
+                    <button id="btn-tab-loose-right" class="btn ${isRight ? 'btn-primary' : 'btn-secondary'}" style="flex:1; font-size:12px; padding:6px; cursor:pointer;">Loose Right Post</button>
+                </div>
+            `;
+        }
+
+        html += `
+                <div class="form-group" style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="inp-loose-post-include-bp" ${includeBP === 'yes' ? 'checked' : ''} style="width: 16px; height: 16px; cursor: pointer;">
+                    <label for="inp-loose-post-include-bp" style="margin:0; font-size:12px; font-weight:600; cursor:pointer; color:var(--text-color);">Include Base Plate</label>
+                </div>
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label style="display:block; font-size:12px; font-weight:600; margin-bottom:4px; color:var(--text-color);">Loose Post Quantity</label>
+                    <input type="number" id="inp-loose-post-qty" class="form-control" value="${qty}" min="1" step="1">
+                </div>
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label style="display:block; font-size:12px; font-weight:600; margin-bottom:4px; color:var(--text-color);">Additional Length (in)</label>
+                    <input type="number" id="inp-loose-post-extra-len" class="form-control" value="${extraLen}" step="0.125">
+                </div>
+                <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+                    <div class="form-group" style="flex: 1;">
+                        <label style="display:block; font-size:12px; font-weight:600; margin-bottom:4px; color:var(--text-color);">Offset X (in)</label>
+                        <input type="number" id="inp-loose-post-offset-x" class="form-control" value="${offsetX}" step="0.125">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label style="display:block; font-size:12px; font-weight:600; margin-bottom:4px; color:var(--text-color);">Offset Y (in)</label>
+                        <input type="number" id="inp-loose-post-offset-y" class="form-control" value="${offsetY}" step="0.125">
+                    </div>
+                </div>
+                <div style="font-size: 11px; color: var(--text-muted); line-height: 1.4; margin-top: 10px; background: rgba(0,0,0,0.15); padding: 8px; border-radius: 4px;">
+                    💡 <b>Offset Note:</b> (0, 0) aligns post center with base plate center. X and Y offsets shift post position on base plate.
+                </div>
+            </div>
+        `;
+
+        dynamicInputs.innerHTML = html;
+
+        const exitBtn = document.getElementById('btn-exit-loose-post');
+        if (exitBtn) {
+            exitBtn.addEventListener('click', () => {
+                balconyWizardState.activeMode = 'panel';
+                balconyWizardState.activePanelType = 'main';
+                const chkLoosePostMode = document.getElementById('chk-loose-post-mode');
+                if (chkLoosePostMode) chkLoosePostMode.checked = false;
+                const grpLoosePostOptions = document.getElementById('grp-loose-post-options');
+                if (grpLoosePostOptions) grpLoosePostOptions.classList.add('hidden');
+                updateInputs();
+                loadActivePanelToInputs();
+                renderCurrentCAD();
+                updateBOMPreview();
+                if (pdfPreviewModeActive) updatePdfPreview();
+            });
+        }
+
+        const tabLeft = document.getElementById('btn-tab-loose-left');
+        if (tabLeft) {
+            tabLeft.addEventListener('click', () => {
+                balconyWizardState.activePanelType = 'looseLeftPost';
+                renderLoosePostEditor();
+                renderCurrentCAD();
+                updateBOMPreview();
+                if (pdfPreviewModeActive) updatePdfPreview();
+            });
+        }
+
+        const tabRight = document.getElementById('btn-tab-loose-right');
+        if (tabRight) {
+            tabRight.addEventListener('click', () => {
+                balconyWizardState.activePanelType = 'looseRightPost';
+                renderLoosePostEditor();
+                renderCurrentCAD();
+                updateBOMPreview();
+                if (pdfPreviewModeActive) updatePdfPreview();
+            });
+        }
+
+        const debouncedUpdatePdfPreview = (delay) => {
+            clearTimeout(window.pdfUpdateTimer);
+            window.pdfUpdateTimer = setTimeout(() => updatePdfPreview(), delay);
+        };
+
+        ['inp-loose-post-qty', 'inp-loose-post-extra-len', 'inp-loose-post-offset-x', 'inp-loose-post-offset-y', 'inp-loose-post-include-bp'].forEach(id => {
+            const inp = document.getElementById(id);
+            if (inp) {
+                const eventName = inp.type === 'checkbox' ? 'change' : 'input';
+                inp.addEventListener(eventName, () => {
+                    saveCurrentInputsToActivePanel();
+                    renderCurrentCAD();
+                    updateBOMPreview();
+                    if (pdfPreviewModeActive) debouncedUpdatePdfPreview(200);
+                });
+            }
+        });
+    }
+
     function renderBasePlateEditor() {
         const activeSet = balconyWizardState.tempSet || balconyWizardState.sets[balconyWizardState.activeSetIdx];
         const activePanel = balconyWizardState.activePanelType;
-        const panelObj = (activePanel === 'main' || activePanel === 'loosePost') ? activeSet.main : (activePanel === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
+        const panelObj = (activePanel === 'main' || (activePanel && activePanel.startsWith('loose'))) ? activeSet.main : (activePanel === 'leftReturn' ? activeSet.leftReturn : activeSet.rightReturn);
         if (!panelObj) return;
         
         if (!panelObj.basePlateConfig) {
             panelObj.basePlateConfig = getDefaultBasePlateConfig();
         }
         const bpConfig = panelObj.basePlateConfig;
+        
+        const activeStyle = (panelObj.railStyle || (activeSet && activeSet.main && activeSet.main.railStyle) || 'classical').toLowerCase();
+        const isCustomStyle = activeStyle.includes('custom');
+        if (!isCustomStyle && bpConfig.connectionType === 'wall_mount') {
+            bpConfig.connectionType = 'bottom';
+        }
         
         const togglePdfBtn = document.getElementById('toggle-pdf-preview');
         const togglePanBtn = document.getElementById('toggle-pan-mode');
@@ -18013,6 +19547,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             </div>
 
+            ${isCustomStyle ? `
+            <div style="border-top: 1px solid var(--border-color); padding-top: 15px; margin-top: 10px; display: flex; flex-direction: column; gap: 10px;">
+                <div class="input-group">
+                    <label>Base Connection</label>
+                    <select id="inp-bp-connectionType">
+                        <option value="bottom" ${bpConfig.connectionType !== 'wall_mount' ? 'selected' : ''}>Standard Bottom Mount</option>
+                        <option value="wall_mount" ${bpConfig.connectionType === 'wall_mount' ? 'selected' : ''}>Wall Mount</option>
+                    </select>
+                </div>
+                <div id="grp-bp-wallMountOffset" class="input-group" style="display: ${bpConfig.connectionType === 'wall_mount' ? 'block' : 'none'};">
+                    <label>Offset (in) <span style="font-size: 10px; color: #8c9ba5; font-weight: normal;">(Post bottom to plate bottom)</span></label>
+                    <input type="number" id="inp-bp-wallMountOffset" value="${bpConfig.wallMountOffset !== undefined ? bpConfig.wallMountOffset : 1.0}" step="0.125" min="0">
+                </div>
+            </div>
+            ` : ''}
+
             <div style="border-top: 1px solid var(--border-color); padding-top: 15px; margin-top: 10px;">
                 <button id="btn-bp-manage-parts" class="btn primary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: bold; background: var(--accent-primary, #00d2ff); color: #fff; padding: 10px; border-radius: 6px; border: none; cursor: pointer;">
                     <i data-lucide="component" style="width: 16px; height: 16px; color: #00ff88;"></i> Parts
@@ -18028,6 +19578,19 @@ document.addEventListener('DOMContentLoaded', () => {
         
         function saveInputsAndRefresh() {
             saveBasePlateInputs(bpConfig);
+            const activeSet = balconyWizardState.tempSet || (balconyWizardState.sets ? balconyWizardState.sets[balconyWizardState.activeSetIdx] : null);
+            if (activeSet) {
+                const activePanel = balconyWizardState.activePanelType || 'main';
+                if (activePanel === 'main' || activePanel.startsWith('loose')) {
+                    if (activeSet.main) activeSet.main.basePlateConfig = JSON.parse(JSON.stringify(bpConfig));
+                    if (activeSet.leftReturn) activeSet.leftReturn.basePlateConfig = JSON.parse(JSON.stringify(bpConfig));
+                    if (activeSet.rightReturn) activeSet.rightReturn.basePlateConfig = JSON.parse(JSON.stringify(bpConfig));
+                } else if (activePanel === 'leftReturn' && activeSet.leftReturn) {
+                    activeSet.leftReturn.basePlateConfig = JSON.parse(JSON.stringify(bpConfig));
+                } else if (activePanel === 'rightReturn' && activeSet.rightReturn) {
+                    activeSet.rightReturn.basePlateConfig = JSON.parse(JSON.stringify(bpConfig));
+                }
+            }
             if (pdfPreviewModeActive) {
                 updatePdfPreview();
             } else {
@@ -18152,7 +19715,17 @@ document.addEventListener('DOMContentLoaded', () => {
             saveInputsAndRefresh();
         });
         
-        ['inp-bp-thickness', 'inp-bp-width', 'inp-bp-height', 'inp-bp-corners-diameter', 'inp-bp-corners-margin', 'inp-bp-grid-rows', 'inp-bp-grid-cols', 'inp-bp-grid-diameter', 'inp-bp-grid-marginX', 'inp-bp-grid-marginY', 'inp-bp-slotLength', 'inp-bp-slotAngle'].forEach(id => {
+        const connTypeEl = document.getElementById('inp-bp-connectionType');
+        if (connTypeEl) {
+            connTypeEl.addEventListener('change', (e) => {
+                const isWall = e.target.value === 'wall_mount';
+                const grp = document.getElementById('grp-bp-wallMountOffset');
+                if (grp) grp.style.display = isWall ? 'block' : 'none';
+                saveInputsAndRefresh();
+            });
+        }
+        
+        ['inp-bp-thickness', 'inp-bp-width', 'inp-bp-height', 'inp-bp-corners-diameter', 'inp-bp-corners-margin', 'inp-bp-grid-rows', 'inp-bp-grid-cols', 'inp-bp-grid-diameter', 'inp-bp-grid-marginX', 'inp-bp-grid-marginY', 'inp-bp-slotLength', 'inp-bp-slotAngle', 'inp-bp-wallMountOffset'].forEach(id => {
             const inp = document.getElementById(id);
             if (inp) {
                 inp.addEventListener('input', saveInputsAndRefresh);
@@ -18160,7 +19733,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         document.getElementById('btn-bp-close').addEventListener('click', () => {
-            saveBasePlateInputs(bpConfig);
+            saveInputsAndRefresh();
             balconyWizardState.activeMode = 'railing';
             if (viewTitle) viewTitle.textContent = "Dynamic Preview";
             
@@ -18196,6 +19769,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.loadActivePanelToInputs = loadActivePanelToInputs;
     window.openExportModal = openExportModal;
 });
+
 
 
 
