@@ -5,3 +5,4 @@ temp_view_extracted/
 scratch/
 *.zip
 *.log
+test_output_extracted/

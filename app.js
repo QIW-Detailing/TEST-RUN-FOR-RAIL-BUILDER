@@ -7678,12 +7678,108 @@ document.addEventListener('DOMContentLoaded', () => {
                 selectedScaleOverride = standardScales.find(s => s.name === vals.customScaleOverride);
             }
 
+            // Check if drawing fits page borders and does not touch/overlap the BOM box
+            const isValidLayout = (s, lMode, compDims) => {
+                const w_mm = s.ratio * cadWidth * 25.4;
+                const h_mm = s.ratio * cadHeight * 25.4;
+
+                // Calculate margins and offsets
+                let tempDimOffsetBottom = 16;
+                let tempMarginBottom = 16;
+                let tempMarginTop = 12;
+                
+                if (lMode === 'fullWidth' || lMode === 'leftAligned') {
+                    if (compDims) {
+                        tempDimOffsetBottom = 11;
+                        tempMarginBottom = 12;
+                        tempMarginTop = 14;
+                    } else {
+                        tempDimOffsetBottom = 16;
+                        tempMarginBottom = 14;
+                        tempMarginTop = 18;
+                    }
+                } else {
+                    if (hasTopDetails) {
+                        tempMarginTop = 12;
+                        tempMarginBottom = 14;
+                    } else {
+                        tempMarginTop = 18;
+                        tempMarginBottom = 14;
+                    }
+                }
+
+                const styleLower = style.toLowerCase();
+                const isClassicOrExec = styleLower.includes('classic') || styleLower.includes('executive') || styleLower.includes('custom');
+                const isMeshStyle_offset = styleLower.includes('urban') || styleLower.includes('villa');
+                if (isClassicOrExec || isMeshStyle_offset) {
+                    tempDimOffsetBottom = compDims ? 16 : 22;
+                }
+
+                // Determine pdfX
+                let tempPdfX;
+                if (lMode === 'leftArea') {
+                    tempPdfX = 7 + 12;
+                } else if (lMode === 'leftAligned') {
+                    const isReturn = (activePanelType === 'leftReturn' || activePanelType === 'rightReturn');
+                    const leftMarginNeeded = isReturn ? 28.0 : 12.0;
+                    tempPdfX = 7 + (isReturn ? 28 : 5) + leftMarginNeeded;
+                } else {
+                    // fullWidth
+                    tempPdfX = (297 - w_mm) / 2;
+                    const rightDimSpan = (compDims ? 23.0 : 33.0) + 3.0;
+                    if (tempPdfX + w_mm + rightDimSpan > 287.0) {
+                        tempPdfX = 287.0 - w_mm - rightDimSpan;
+                    }
+                    if (tempPdfX < 21.0) {
+                        tempPdfX = 21.0;
+                    }
+                }
+
+                // Determine pdfY
+                const eff_upperY = Math.max(38, upperBoundaryY);
+                const remainingYSpace = (175 - eff_upperY) - (h_mm + tempMarginTop + tempMarginBottom);
+                const isRetPanel = (activePanelType === 'leftReturn' || activePanelType === 'rightReturn');
+                const maxDimY = isRetPanel ? 158.0 : 163.0;
+                const maxExtra = Math.max(0, maxDimY - (eff_upperY + tempMarginTop + h_mm + tempDimOffsetBottom));
+                const extraSpace = Math.min(Math.max(0, remainingYSpace / 2), maxExtra);
+                const tempPdfY = eff_upperY + tempMarginTop + extraSpace;
+
+                // Check horizontal borders (left: 7.0, right: 290.0)
+                if (tempPdfX < 7.0 || tempPdfX + w_mm > 290.0) {
+                    return false;
+                }
+
+                // Check bottom border (maxDimY)
+                if (tempPdfY + h_mm + tempDimOffsetBottom > maxDimY) {
+                    return false;
+                }
+
+                // Check BOM box collision
+                // BOM box is in range X: [199.0, 290.0], Y: [7.0, bomBottomY]
+                const bomBottomY_local = 18 + predictedBomCount * 4.5;
+                const hasHorizontalOverlap = (tempPdfX + w_mm > 199.0) && (tempPdfX < 290.0);
+                if (hasHorizontalOverlap) {
+                    // Top of annotations is tempPdfY - 33
+                    if (tempPdfY - 33 < bomBottomY_local) {
+                        return false;
+                    }
+                }
+
+                return true;
+            };
+
             if (!isLoosePost) {
                 let found = false;
                 for (let i = 0; i < standardScales.length; i++) {
                     const s = standardScales[i];
                     if (selectedScaleOverride && s.name !== selectedScaleOverride.name) {
                         continue;
+                    }
+                    // Skip scales larger than 1/2" = 1'-0" for panels longer than 8ft (unless overridden by user)
+                    if (!selectedScaleOverride && (vals.length || 120) > 96) {
+                        if (s.ratio > (0.5 / 12) + 0.0001) {
+                            continue;
+                        }
                     }
                     const w_mm = s.ratio * cadWidth * 25.4;
                     const h_mm = s.ratio * cadHeight * 25.4;
@@ -7694,11 +7790,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     const allowLeftArea = (vals.length || 120) <= 96; // Only allow leftArea for short panels (<= 8ft) so main panels auto-scale to 1/2" = 1'-0"
 
                     if (allowLeftArea && w_mm <= leftAvailW && h_mm <= leftAvailH) {
-                        selectedScale = s;
-                        layoutMode = 'leftArea';
-                        useCompressedDims = false;
-                        found = true;
-                        break;
+                        if (isValidLayout(s, 'leftArea', false)) {
+                            selectedScale = s;
+                            layoutMode = 'leftArea';
+                            useCompressedDims = false;
+                            found = true;
+                            break;
+                        }
                     }
 
                     // 2. Check if it fits in Full-Width layout with standard dimensions (vertical padding: 35mm)
@@ -7706,22 +7804,26 @@ document.addEventListener('DOMContentLoaded', () => {
                     const fullAvailH_std = (175 - upperBoundaryY) - 35;
 
                     if (w_mm <= fullAvailW && h_mm <= fullAvailH_std) {
-                        selectedScale = s;
-                        layoutMode = 'fullWidth';
-                        useCompressedDims = false;
-                        found = true;
-                        break;
+                        if (isValidLayout(s, 'fullWidth', false)) {
+                            selectedScale = s;
+                            layoutMode = 'fullWidth';
+                            useCompressedDims = false;
+                            found = true;
+                            break;
+                        }
                     }
 
                     // 3. Check if it fits in Full-Width layout with compressed dimensions (vertical padding: 25mm)
                     const fullAvailH_comp = (175 - upperBoundaryY) - 25;
 
                     if (w_mm <= fullAvailW && h_mm <= fullAvailH_comp) {
-                        selectedScale = s;
-                        layoutMode = 'fullWidth';
-                        useCompressedDims = true;
-                        found = true;
-                        break;
+                        if (isValidLayout(s, 'fullWidth', true)) {
+                            selectedScale = s;
+                            layoutMode = 'fullWidth';
+                            useCompressedDims = true;
+                            found = true;
+                            break;
+                        }
                     }
 
                     // 4. Check if it fits to the left of the BOM (leftAligned layout)
@@ -7733,20 +7835,24 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     const availH_left_std = (175 - eff_upperBoundaryY) - 59;
                     if (w_mm <= availW_left && h_mm <= availH_left_std) {
-                        selectedScale = s;
-                        layoutMode = 'leftAligned';
-                        useCompressedDims = false;
-                        found = true;
-                        break;
+                        if (isValidLayout(s, 'leftAligned', false)) {
+                            selectedScale = s;
+                            layoutMode = 'leftAligned';
+                            useCompressedDims = false;
+                            found = true;
+                            break;
+                        }
                     }
 
                     const availH_left_comp = (175 - eff_upperBoundaryY) - 40;
                     if (w_mm <= availW_left && h_mm <= availH_left_comp) {
-                        selectedScale = s;
-                        layoutMode = 'leftAligned';
-                        useCompressedDims = true;
-                        found = true;
-                        break;
+                        if (isValidLayout(s, 'leftAligned', true)) {
+                            selectedScale = s;
+                            layoutMode = 'leftAligned';
+                            useCompressedDims = true;
+                            found = true;
+                            break;
+                        }
                     }
                 }
 
@@ -7794,7 +7900,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
 
                     const styleLower = style.toLowerCase();
-                    const isClassicOrExec = styleLower.includes('classic') || styleLower.includes('executive');
+                    const isClassicOrExec = styleLower.includes('classic') || styleLower.includes('executive') || styleLower.includes('custom');
                     const isMeshStyle_offset = styleLower.includes('urban') || styleLower.includes('villa');
                     if (isClassicOrExec || isMeshStyle_offset) {
                         tempDimOffsetBottom = useCompressedDims ? 16 : 22;
@@ -7875,7 +7981,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 marginRight = 12;
             }
 
-            const isClassicOrExec = styleLower.includes('classic') || styleLower.includes('executive');
+            const isClassicOrExec = styleLower.includes('classic') || styleLower.includes('executive') || styleLower.includes('custom');
             const isMeshStyle_offset = styleLower.includes('urban') || styleLower.includes('villa');
             if (isClassicOrExec || isMeshStyle_offset) {
                 dimOffsetBottom = useCompressedDims ? 16 : 22;
@@ -8138,6 +8244,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let leftPostW = 0, rightPostW = 0, midPostW = 0, topH = 0, botH = 0, midH = 0, pickW = 0;
             let midRailGap = 12.0, kickPlateH = 12.0, midPostCount = 0;
             let noPosts = false, numSpans = 1, numPosts = 0, actualPostSpacing = 0, clearWidth = 0, numPickets = 0, finalPicketsCount = 0, totalPickets = 0;
+            let bpW = 6.0, bpL = 6.0, bpH = 0.5;
 
             if (cat === 'rail_catalog') {
                 const style = vals.railStyle || 'classical';
@@ -8658,7 +8765,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 const bpc_dim = vals.basePlateConfig || {};
                 const isWall_dim = (vals.includeBasePlates === 'yes' && bpc_dim.connectionType === 'wall_mount');
                 const wallOffset_dim = isWall_dim ? (parseFloat(bpc_dim.wallMountOffset) || 1.0) : 0;
-                const bpThick = getProfileDimension('plate', vals.basePlateSize, vals.basePlateT || 0.5);
+                bpW = vals.basePlateW || 6.0;
+                bpL = vals.basePlateL || 6.0;
+                bpH = getProfileDimension('plate', vals.basePlateSize, vals.basePlateT || 0.5);
+                if (bpc_dim.plateShape === 'qiw_standard') {
+                    const isQBP54 = bpc_dim.qiwPlateType === 'QBP54';
+                    bpW = isQBP54 ? 5.0 : 4.0;
+                    bpL = isQBP54 ? 5.0 : 4.0;
+                    bpH = isQBP54 ? 0.25 : 0.1875;
+                } else {
+                    if (bpc_dim.width !== undefined) bpW = parseFloat(bpc_dim.width) || 6.0;
+                    if (bpc_dim.height !== undefined) bpL = parseFloat(bpc_dim.height) || 6.0;
+                    if (bpc_dim.thickness !== undefined) bpH = parseFloat(bpc_dim.thickness) || 0.5;
+                }
+                const bpThick = bpH;
                 const postYStart = 0;
 
                 if (hasAnyPost) {
@@ -11249,7 +11369,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         tx += 1.8;
                     }
 
-                    if (dimId && (dimId.includes('gap') || len < 10.0) && dimId !== 'dim-vert-right-bot-gap' && dimId !== 'dim-vert-bot-gap') {
+                    if (len < 10.0) {
+                        ty = midY + 0.4; // Very small shift for short dimensions to keep it centered
+                    } else if (dimId && dimId.includes('gap')) {
                         ty = midY + 0.9; // Shift down by 0.9mm to compensate for 1.8mm text length and center it perfectly
                     } else {
                         ty = midY + 1.8; // Shift down by 1.8mm for longer text to center it perfectly
@@ -11893,7 +12015,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const isMeshStyle = (style === 'urban_balcony' || style === 'villa_balcony' || style === 'urban_custom' || style === 'villa_custom');
                     const defaultScenarioAQty = calculateScenarioADefaultQty(vals, null, activeType, isMeshStyle);
                     const looseQty = parseInt(vals[activeType + '_qty']) || parseInt(vals.looseQty) || parseInt(document.getElementById('inp-loose-post-qty')?.value) || defaultScenarioAQty;
-                    const effectiveQty = looseQty * assemblyQty;
+                    const effectiveQty = isZipBatch ? assemblyQty : (looseQty * assemblyQty);
                     let pHeight = (props ? props.pHeight : 45.75) + extraLen;
                     let topH = props ? props.topRailH : 1.5;
                     let postType = props ? props.postType : 'hss_rect';

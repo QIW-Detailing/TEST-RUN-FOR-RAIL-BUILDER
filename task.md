@@ -130,6 +130,8 @@
 - [x] Restrict all typical detail annotations to stay strictly inside the box borders (`boxX + 1.5` to `boxX + boxW - 1.5`)
 - [x] Automatically launch the CAD or PDF preview when entering the Base Plate Designer from the sidebar link
 - [x] Prevent typical detail and Typical Section A mesh details from overlapping by stacking them vertically when base plates are present
-- [ ] Align base plate leader target coordinate with the first available post base plate (left post, first mid post, right post) instead of panel center
-- [ ] Format base plate description as `PL [width]x[thickness]` and length as `[length]` (e.g. `0'-6"`) in BOM and FBOM tables
-- [ ] Include HSS post size AND gauge (e.g. `HSS 1 1/2x1 1/2x11GA POST`) in Typical Base Plate Details connection box labeling
+- [x] Align base plate leader target coordinate with the first available post base plate (left post, first mid post, right post) instead of panel center
+- [x] Format base plate description as `PL [width]x[thickness]` and length as `[length]` (e.g. `0'-6"`) in BOM and FBOM tables
+- [x] Include HSS post size AND gauge (e.g. `HSS 1 1/2x1 1/2x11GA POST`) in Typical Base Plate Details connection box labeling
+- [x] Respect manual quantity override in download batch and consolidated BOM compilation
+- [x] Symmetrically center the vertical 2 1/2" top gap dimension on loose posts vertically using custom center offset, while preserving original centering for all other dimensions

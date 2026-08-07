@@ -3766,6 +3766,14 @@ if (typeof makerjs !== 'undefined' && makerjs.measure) {
             if (bpc.plateShape === 'rect') {
                 bpW = Number(bpc.width) || 6.0;
                 bpL = Number(bpc.height) || 6.0;
+            } else if (bpc.plateShape === 'qiw_standard') {
+                const isQBP54 = bpc.qiwPlateType === 'QBP54';
+                bpW = isQBP54 ? 5.0 : 4.0;
+                bpL = isQBP54 ? 5.0 : 4.0;
+                bpH = isQBP54 ? 0.25 : 0.1875;
+                bpHoleD = isQBP54 ? 0.5 : 0.375;
+                bpHoleOffsetX = isQBP54 ? 0.5 : 0.375;
+                bpHoleOffsetY = isQBP54 ? 0.5 : 0.375;
             } else {
                 const vs = bpc.polyVerts.filter(v => v.x !== "" && v.y !== "");
                 if (vs.length) {
