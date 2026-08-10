@@ -9188,7 +9188,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                    const bpMarkStr = resolveBasePlatePieceMark(bpc);
                                    if (bpMarkStr) {
                                       let postCx = 0;
-                                      if (vals.leftPost === 'yes') {
+                                      if (vals.leftPost === 'yes' || vals.leftPost === 'corner') {
                                           postCx = postW / 2;
                                       } else if (midPostCount > 0) {
                                           const resolvedCenters = resolveMidPostCenters(vals.length, vals.leftPost, vals.rightPost, vals.midPosts, midPostCount, postW, customSpacings, style, vals.extra6, activePanelType, vals.deltaLeft || 0, vals.deltaRight || 0);
@@ -9197,19 +9197,44 @@ document.addEventListener('DOMContentLoaded', () => {
                                           } else {
                                               postCx = vals.length * 0.5;
                                           }
-                                      } else if (vals.rightPost === 'yes') {
+                                      } else if (vals.rightPost === 'yes' || vals.rightPost === 'corner') {
                                           postCx = vals.length - postW / 2;
                                       } else {
                                           postCx = vals.length * 0.5;
                                       }
+                                      
                                       const isWall_lead = bpc.connectionType === 'wall_mount';
                                       const wallOffset_lead = isWall_lead ? (parseFloat(bpc.wallMountOffset) || 1.0) : 0;
-                                      const wallPlateW_lead = isWall_lead ? ((bpc.plateShape === 'qiw_standard') ? (bpc.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpc.width) || 6.0)) : (parseFloat(bpc.width) || 6.0);
-                                      const wallPlateH_lead = isWall_lead ? ((bpc.plateShape === 'qiw_standard') ? (bpc.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpc.height) || 6.0)) : (getProfileDimension('plate', vals.basePlateSize, vals.basePlateT || 0.5));
-                                      let targetX = postCx + wallPlateW_lead / 2;
-                                      let targetY = isWall_lead ? (wallOffset_lead + wallPlateH_lead / 2) : (-wallPlateH_lead / 2);
+                                      let bpW_actual = 6.0;
+                                      let bpH_actual = 0.5;
+                                      let bpH_height_actual = 6.0;
+                                      if (bpc.plateShape === 'qiw_standard') {
+                                          const isQBP54 = bpc.qiwPlateType === 'QBP54';
+                                          bpW_actual = isQBP54 ? 5.0 : 4.0;
+                                          bpH_height_actual = isQBP54 ? 5.0 : 4.0;
+                                          bpH_actual = isQBP54 ? 0.25 : 0.1875;
+                                      } else if (bpc.plateShape === 'rect') {
+                                          bpW_actual = parseFloat(bpc.width) !== undefined ? parseFloat(bpc.width) : 6.0;
+                                          bpH_height_actual = parseFloat(bpc.height) !== undefined ? parseFloat(bpc.height) : 6.0;
+                                          bpH_actual = parseFloat(bpc.thickness) !== undefined ? parseFloat(bpc.thickness) : 0.5;
+                                      } else {
+                                          const vs = (bpc.polyVerts || []).filter(v => v.x !== "" && v.y !== "");
+                                          if (vs.length) {
+                                              const xs = vs.map(v => Number(v.x));
+                                              const ys = vs.map(v => Number(v.y));
+                                              const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+                                              bpW_actual = Math.max(maxX - minX, 0.001);
+                                              bpH_height_actual = Math.max(maxY - minY, 0.001);
+                                              bpH_actual = parseFloat(bpc.thickness) !== undefined ? parseFloat(bpc.thickness) : 0.5;
+                                          } else {
+                                              bpW_actual = 6.0;
+                                              bpH_height_actual = 6.0;
+                                              bpH_actual = 0.5;
+                                          }
+                                      }
+                                      let targetX = postCx + bpW_actual / 2;
+                                      let targetY = isWall_lead ? (wallOffset_lead + bpH_height_actual / 2) : (-bpH_actual / 2);
                                       addLeader(targetX, targetY, bpMarkStr, "leader-base-plate");
-                                   }
                                }
                          } else {
                             // Main Panel
@@ -9378,11 +9403,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
                                     const isWall_lead = bpc.connectionType === 'wall_mount';
                                     const wallOffset_lead = isWall_lead ? (parseFloat(bpc.wallMountOffset) || 1.0) : 0;
-                                    const wallPlateW_lead = isWall_lead ? ((bpc.plateShape === 'qiw_standard') ? (bpc.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpc.width) || 6.0)) : (parseFloat(bpc.width) || 6.0);
-                                    const wallPlateH_lead = isWall_lead ? ((bpc.plateShape === 'qiw_standard') ? (bpc.qiwPlateType === 'QBP54' ? 5.0 : 4.0) : (parseFloat(bpc.height) || 6.0)) : (getProfileDimension('plate', vals.basePlateSize, vals.basePlateT || 0.5));
-                                     
-                                    let targetX = postCx + wallPlateW_lead / 2;
-                                    let targetY = isWall_lead ? (wallOffset_lead + wallPlateH_lead / 2) : (-wallPlateH_lead / 2);
+                                    let bpW_actual = 6.0;
+                                    let bpH_actual = 0.5;
+                                    let bpH_height_actual = 6.0;
+                                    if (bpc.plateShape === 'qiw_standard') {
+                                        const isQBP54 = bpc.qiwPlateType === 'QBP54';
+                                        bpW_actual = isQBP54 ? 5.0 : 4.0;
+                                        bpH_height_actual = isQBP54 ? 5.0 : 4.0;
+                                        bpH_actual = isQBP54 ? 0.25 : 0.1875;
+                                    } else if (bpc.plateShape === 'rect') {
+                                        bpW_actual = parseFloat(bpc.width) !== undefined ? parseFloat(bpc.width) : 6.0;
+                                        bpH_height_actual = parseFloat(bpc.height) !== undefined ? parseFloat(bpc.height) : 6.0;
+                                        bpH_actual = parseFloat(bpc.thickness) !== undefined ? parseFloat(bpc.thickness) : 0.5;
+                                    } else {
+                                        const vs = (bpc.polyVerts || []).filter(v => v.x !== "" && v.y !== "");
+                                        if (vs.length) {
+                                            const xs = vs.map(v => Number(v.x));
+                                            const ys = vs.map(v => Number(v.y));
+                                            const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+                                            bpW_actual = Math.max(maxX - minX, 0.001);
+                                            bpH_height_actual = Math.max(maxY - minY, 0.001);
+                                            bpH_actual = parseFloat(bpc.thickness) !== undefined ? parseFloat(bpc.thickness) : 0.5;
+                                        } else {
+                                            bpW_actual = 6.0;
+                                            bpH_height_actual = 6.0;
+                                            bpH_actual = 0.5;
+                                        }
+                                    }
+                                    let targetX = postCx + bpW_actual / 2;
+                                    let targetY = isWall_lead ? (wallOffset_lead + bpH_height_actual / 2) : (-bpH_actual / 2);
                                     addLeader(targetX, targetY, bpMarkStr, "leader-base-plate");
                                 }
                             }
