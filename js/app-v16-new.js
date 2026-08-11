@@ -6965,7 +6965,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Generate Summary Report PDF and add to ZIP
         const { jsPDF } = window.jspdf;
-        const summaryDoc = new jsPDF('portrait', 'mm', 'a4'); // A4: 210 x 297 mm
+        const summaryDoc = new jsPDF('portrait', 'mm', 'a4', true); // A4: 210 x 297 mm
         
         // Borders
         summaryDoc.setDrawColor(0, 0, 0);
@@ -7193,7 +7193,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return new Promise((resolve, reject) => {
             const { jsPDF } = window.jspdf;
             const modelToDraw = customModelOverride || currentModel;
-            const doc = new jsPDF('landscape', 'mm', 'a4'); // A4 landscape: 297mm x 210mm
+            const doc = new jsPDF('landscape', 'mm', 'a4', true); // A4 landscape: 297mm x 210mm
             const cat = shapeCategory.value;
             let desc = cat ? cat.toUpperCase() : "Drawing";
             let sectionCutPdfX = null;
@@ -10099,9 +10099,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const isRightPost = (activePanelType === 'looseRightPost');
                 const isMeshStyle = (style === 'urban_balcony' || style === 'villa_balcony' || style === 'urban_custom' || style === 'villa_custom');
 
-                const postDwgMark = (mainMark && (mainMark.toUpperCase().includes('LP') || mainMark.toUpperCase().includes('RP')))
-                    ? mainMark.toUpperCase()
-                    : `${drawingNo.toUpperCase()}${isRightPost ? 'RP' : 'LP'}`;
+                const postDwgMark = mainMark ? mainMark.toUpperCase() : `${drawingNo.toUpperCase()}${isRightPost ? 'RP' : 'LP'}`;
                 const cyPost = pHeight * 0.8;
                 
                 if (isRightPost) {
@@ -10378,10 +10376,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 doc.rect(boxX, boxY, boxW, boxH, 'FD');
 
                 // Main Title
+                let titleText = "DETAIL A - BASE PLATE DETAIL";
+                if (bpc && bpc.pieceMark && bpc.pieceMark.trim() !== "") {
+                    titleText = `DETAIL A - BASE PLATE ${bpc.pieceMark.trim()}`;
+                } else if (bpc && bpc.plateShape === 'qiw_standard') {
+                    const stdMark = bpc.qiwPlateType || 'QBP54';
+                    titleText = `DETAIL A - BASE PLATE ${stdMark}`;
+                } else {
+                    titleText = "DETAIL A - BASE PLATE BP-X";
+                }
+
                 doc.setFont('helvetica', 'bold');
                 doc.setFontSize(5.5);
                 doc.setTextColor(0, 0, 0);
-                doc.text("TYPICAL BASE PLATE DETAILS", boxX + boxW / 2, boxY + 4.5, { align: "center" });
+                doc.text(titleText, boxX + boxW / 2, boxY + 4.5, { align: "center" });
 
                 const isWallMount = (bpc.connectionType === 'wall_mount');
 
@@ -10603,21 +10611,87 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-                // Dimensioning lines for width & length
-                const dimY = cy1 + h/2 * bpScale + 3.5;
-                doc.setLineWidth(0.10);
-                doc.line(cx1 - w/2 * bpScale, dimY, cx1 + w/2 * bpScale, dimY);
-                doc.line(cx1 - w/2 * bpScale, dimY - 0.8, cx1 - w/2 * bpScale, dimY + 0.8);
-                doc.line(cx1 + w/2 * bpScale, dimY - 0.8, cx1 + w/2 * bpScale, dimY + 0.8);
-                doc.setFont('helvetica', 'normal');
-                doc.setFontSize(3.8);
-                doc.text(formatFraction(w), cx1, dimY + 3.1, { align: "center" });
+                // 1. Stacked Horizontal Dimensions (Bottom)
+                const dimY_inner = cy1 + h/2 * bpScale + 3.5;
+                const dimY_outer = cy1 + h/2 * bpScale + 7.5;
+                const postCenterDrawX = cx1 + offX * bpScale;
 
-                const dimX = cx1 + w/2 * bpScale + 2.5;
-                doc.line(dimX, cy1 - h/2 * bpScale, dimX, cy1 + h/2 * bpScale);
-                doc.line(dimX - 0.8, cy1 - h/2 * bpScale, dimX + 0.8, cy1 - h/2 * bpScale);
-                doc.line(dimX - 0.8, cy1 + h/2 * bpScale, dimX + 0.8, cy1 + h/2 * bpScale);
-                doc.text(formatFraction(h), dimX + 1.0, cy1 + 1, { align: "left" });
+                doc.setLineWidth(0.10);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(3.6);
+
+                // Inner split segments (left edge -> post center, post center -> right edge)
+                // Line 1: Left edge to post center
+                doc.line(cx1 - w/2 * bpScale, dimY_inner, postCenterDrawX, dimY_inner);
+                // Line 2: Post center to right edge
+                doc.line(postCenterDrawX, dimY_inner, cx1 + w/2 * bpScale, dimY_inner);
+                // Extension lines for inner ticks
+                doc.line(cx1 - w/2 * bpScale, dimY_inner - 0.8, cx1 - w/2 * bpScale, dimY_inner + 0.8);
+                doc.line(postCenterDrawX, dimY_inner - 0.8, postCenterDrawX, dimY_inner + 0.8);
+                doc.line(cx1 + w/2 * bpScale, dimY_inner - 0.8, cx1 + w/2 * bpScale, dimY_inner + 0.8);
+                // Draw diagonal slash ticks
+                doc.line(cx1 - w/2 * bpScale - 0.3, dimY_inner - 0.3, cx1 - w/2 * bpScale + 0.3, dimY_inner + 0.3);
+                doc.line(postCenterDrawX - 0.3, dimY_inner - 0.3, postCenterDrawX + 0.3, dimY_inner + 0.3);
+                doc.line(cx1 + w/2 * bpScale - 0.3, dimY_inner - 0.3, cx1 + w/2 * bpScale + 0.3, dimY_inner + 0.3);
+
+                // Values for inner split
+                const leftSegmentVal = w/2 + offX;
+                const rightSegmentVal = w/2 - offX;
+                doc.text(formatFraction(leftSegmentVal), (cx1 - w/2 * bpScale + postCenterDrawX) / 2, dimY_inner - 0.4, { align: "center" });
+                doc.text(formatFraction(rightSegmentVal), (postCenterDrawX + cx1 + w/2 * bpScale) / 2, dimY_inner - 0.4, { align: "center" });
+
+                // Outer overall width
+                doc.line(cx1 - w/2 * bpScale, dimY_outer, cx1 + w/2 * bpScale, dimY_outer);
+                doc.line(cx1 - w/2 * bpScale, dimY_outer - 0.8, cx1 - w/2 * bpScale, dimY_outer + 0.8);
+                doc.line(cx1 + w/2 * bpScale, dimY_outer - 0.8, cx1 + w/2 * bpScale, dimY_outer + 0.8);
+                doc.line(cx1 - w/2 * bpScale - 0.3, dimY_outer - 0.3, cx1 - w/2 * bpScale + 0.3, dimY_outer + 0.3);
+                doc.line(cx1 + w/2 * bpScale - 0.3, dimY_outer - 0.3, cx1 + w/2 * bpScale + 0.3, dimY_outer + 0.3);
+                doc.text(formatFraction(w), cx1, dimY_outer + 2.8, { align: "center" });
+
+
+                // 2. Stacked Vertical Dimensions (Right)
+                const dimX_inner = cx1 + w/2 * bpScale + 3.0;
+                const dimX_outer = cx1 + w/2 * bpScale + 7.0;
+                const postCenterDrawY = cy1 - offY * bpScale;
+
+                // Inner split segments (bottom edge -> post center, post center -> top edge)
+                // Line 1: Bottom edge to post center
+                doc.line(dimX_inner, cy1 + h/2 * bpScale, dimX_inner, postCenterDrawY);
+                // Line 2: Post center to top edge
+                doc.line(dimX_inner, postCenterDrawY, dimX_inner, cy1 - h/2 * bpScale);
+                // Extension lines for inner ticks
+                doc.line(dimX_inner - 0.8, cy1 + h/2 * bpScale, dimX_inner + 0.8, cy1 + h/2 * bpScale);
+                doc.line(dimX_inner - 0.8, postCenterDrawY, dimX_inner + 0.8, postCenterDrawY);
+                doc.line(dimX_inner - 0.8, cy1 - h/2 * bpScale, dimX_inner + 0.8, cy1 - h/2 * bpScale);
+                // Draw diagonal slash ticks
+                doc.line(dimX_inner - 0.3, cy1 + h/2 * bpScale - 0.3, dimX_inner + 0.3, cy1 + h/2 * bpScale + 0.3);
+                doc.line(dimX_inner - 0.3, postCenterDrawY - 0.3, dimX_inner + 0.3, postCenterDrawY + 0.3);
+                doc.line(dimX_inner - 0.3, cy1 - h/2 * bpScale - 0.3, dimX_inner + 0.3, cy1 - h/2 * bpScale + 0.3);
+
+                // Values for inner split
+                const botSegmentVal = h/2 + offY;
+                const topSegmentVal = h/2 - offY;
+                doc.text(formatFraction(botSegmentVal), dimX_inner + 1.0, (cy1 + h/2 * bpScale + postCenterDrawY) / 2 + 1.2, { align: "left" });
+                doc.text(formatFraction(topSegmentVal), dimX_inner + 1.0, (postCenterDrawY + cy1 - h/2 * bpScale) / 2 + 1.2, { align: "left" });
+
+                // Outer overall height
+                doc.line(dimX_outer, cy1 - h/2 * bpScale, dimX_outer, cy1 + h/2 * bpScale);
+                doc.line(dimX_outer - 0.8, cy1 - h/2 * bpScale, dimX_outer + 0.8, cy1 - h/2 * bpScale);
+                doc.line(dimX_outer - 0.8, cy1 + h/2 * bpScale, dimX_outer + 0.8, cy1 + h/2 * bpScale);
+                doc.line(dimX_outer - 0.3, cy1 - h/2 * bpScale - 0.3, dimX_outer + 0.3, cy1 - h/2 * bpScale + 0.3);
+                doc.line(dimX_outer - 0.3, cy1 + h/2 * bpScale - 0.3, dimX_outer + 0.3, cy1 + h/2 * bpScale + 0.3);
+                doc.text(formatFraction(h), dimX_outer + 1.0, cy1 + 1.2, { align: "left" });
+
+                // Draw center projection dashed lines from post center to dimensions
+                doc.setLineWidth(0.12);
+                doc.setLineDashPattern([1.2, 1.2], 0);
+                doc.setDrawColor(0, 0, 0);
+                // Vertical center projection line (from post center Cy to dimY_inner)
+                doc.line(postCx, postCy, postCx, dimY_inner);
+                // Horizontal center projection line (from post center Cx to dimX_inner)
+                doc.line(postCx, postCy, dimX_inner, postCy);
+                doc.setLineDashPattern([], 0);
+
 
                 // Draw corner margin dimensions in Typical details plan view
                 const margins = getBasePlateCornerMargins(bpc);
@@ -12171,11 +12245,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const postDwgName = (style === 'classical' || style === 'executive' || style === 'urban_balcony' || style === 'villa_balcony') ? `HSS 1.5x1.5x11GA` : (vals.postSize === 'CUSTOM' ? `HSS ${postW}x${postH}x${postT}` : vals.postSize);
                     
                     const isRightPost = (activePanelType === 'looseRightPost');
-                    const loosePostMark = (isLoosePost || activePanelType === 'looseRightPost' || activePanelType === 'looseLeftPost')
-                        ? ((mainMark && (mainMark.toUpperCase().includes('LP') || mainMark.toUpperCase().includes('RP')))
-                            ? mainMark.toUpperCase()
-                            : `${drawingNo.toUpperCase()}${isRightPost ? 'RP' : 'LP'}`)
-                        : mainMark;
+                    const loosePostMark = mainMark ? mainMark.toUpperCase() : `${drawingNo.toUpperCase()}${isRightPost ? 'RP' : 'LP'}`;
 
                     bomItems.push({
                         mark: loosePostMark,
@@ -18435,17 +18505,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function resolveBasePlatePieceMark(bpConfig) {
         if (!bpConfig) return "bp1";
+        if (bpConfig.pieceMark && bpConfig.pieceMark.trim() !== "") {
+            return bpConfig.pieceMark.trim();
+        }
         
         const uniqueConfigs = [];
         const addToUnique = (cfg) => {
-            if (!cfg) return;
+            if (!cfg) return "";
+            if (cfg.pieceMark && cfg.pieceMark.trim() !== "") {
+                return cfg.pieceMark.trim();
+            }
             for (let i = 0; i < uniqueConfigs.length; i++) {
                 if (areBasePlatesIdentical(uniqueConfigs[i], cfg)) {
-                    return i + 1;
+                    return `bp${i + 1}`;
                 }
             }
             uniqueConfigs.push(cfg);
-            return uniqueConfigs.length;
+            return `bp${uniqueConfigs.length}`;
         };
         
         // Scan all balconies in project
@@ -18475,8 +18551,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
-        const markIndex = addToUnique(bpConfig);
-        return `bp${markIndex}`;
+        return addToUnique(bpConfig) || "bp1";
     }
 
     function getPolyBounds(verts) {
@@ -18709,6 +18784,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const shapeSelect = document.getElementById('inp-bp-plateShape');
         if (!shapeSelect) return;
         
+        const pieceMarkInp = document.getElementById('inp-bp-pieceMark');
+        if (pieceMarkInp) {
+            bpConfig.pieceMark = pieceMarkInp.value.trim();
+        }
+        
         bpConfig.plateShape = shapeSelect.value;
         
         const connTypeSelect = document.getElementById('inp-bp-connectionType');
@@ -18851,7 +18931,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function updateBasePlatePDFPreview(bpConfig) {
         const { jsPDF } = window.jspdf;
-        const doc = new jsPDF('landscape', 'mm', 'a4');
+        const doc = new jsPDF('landscape', 'mm', 'a4', true);
         
         doc.setDrawColor(0, 0, 0);
         doc.setLineWidth(0.5);
@@ -19729,6 +19809,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 <h3 style="margin: 0; font-family: 'Outfit', sans-serif; font-size: 16px; color: var(--accent-primary); font-weight: bold;">Base Plate Designer</h3>
                 <button id="btn-bp-close" class="btn success" style="padding: 6px 12px; font-weight: bold; background: #00ff88; color: #000; border: none; border-radius: 6px; cursor: pointer;">Apply & Close</button>
             </div>
+            <div class="input-group">
+                <label>Piece Mark</label>
+                <input type="text" id="inp-bp-pieceMark" placeholder="e.g. bp1 (default)" value="${bpConfig.pieceMark || ''}">
+            </div>
             
             <div class="input-group">
                 <label>Plate Shape</label>
@@ -20026,7 +20110,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
         
-        ['inp-bp-thickness', 'inp-bp-width', 'inp-bp-height', 'inp-bp-corners-diameter', 'inp-bp-corners-margin', 'inp-bp-grid-rows', 'inp-bp-grid-cols', 'inp-bp-grid-diameter', 'inp-bp-grid-marginX', 'inp-bp-grid-marginY', 'inp-bp-slotLength', 'inp-bp-slotAngle', 'inp-bp-wallMountOffset'].forEach(id => {
+        ['inp-bp-pieceMark', 'inp-bp-thickness', 'inp-bp-width', 'inp-bp-height', 'inp-bp-corners-diameter', 'inp-bp-corners-margin', 'inp-bp-grid-rows', 'inp-bp-grid-cols', 'inp-bp-grid-diameter', 'inp-bp-grid-marginX', 'inp-bp-grid-marginY', 'inp-bp-slotLength', 'inp-bp-slotAngle', 'inp-bp-wallMountOffset'].forEach(id => {
             const inp = document.getElementById(id);
             if (inp) {
                 inp.addEventListener('input', saveInputsAndRefresh);

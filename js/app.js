@@ -1,4 +1,4 @@
-﻿/**
+/**
  * SteelDraft Main Application Logic
  */
 
@@ -5974,7 +5974,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Generate Summary Report PDF and add to ZIP
         const { jsPDF } = window.jspdf;
-        const summaryDoc = new jsPDF('portrait', 'mm', 'a4'); // A4: 210 x 297 mm
+        const summaryDoc = new jsPDF('portrait', 'mm', 'a4', true); // A4: 210 x 297 mm
         
         // Borders
         summaryDoc.setDrawColor(0, 0, 0);
@@ -6132,7 +6132,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return new Promise((resolve, reject) => {
             const { jsPDF } = window.jspdf;
             const modelToDraw = customModelOverride || currentModel;
-            const doc = new jsPDF('landscape', 'mm', 'a4'); // A4 landscape: 297mm x 210mm
+            const doc = new jsPDF('landscape', 'mm', 'a4', true); // A4 landscape: 297mm x 210mm
             const cat = shapeCategory.value;
             let desc = cat ? cat.toUpperCase() : "Drawing";
             let sectionCutPdfX = null;

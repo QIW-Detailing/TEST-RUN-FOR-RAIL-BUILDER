@@ -43,16 +43,16 @@ while ($listener.IsListening) {
             
             if (Test-Path $filePath -PathType Leaf) {
                 $bytes = [System.IO.File]::ReadAllBytes($filePath)
-                $response.ContentLength64 = $bytes.Length
-                
-                if ($filePath.EndsWith(".js")) {
-                    $response.ContentType = "application/javascript"
-                } elseif ($filePath.EndsWith(".html")) {
-                    $response.ContentType = "text/html"
-                } elseif ($filePath.EndsWith(".css")) {
-                    $response.ContentType = "text/css"
+                $response.ContentType = switch ([System.IO.Path]::GetExtension($filePath).ToLower()) {
+                    ".html" { "text/html; charset=utf-8" }
+                    ".css"  { "text/css" }
+                    ".js"   { "application/javascript" }
+                    default { "application/octet-stream" }
                 }
-                
+                $response.Headers.Add("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+                $response.Headers.Add("Pragma", "no-cache")
+                $response.Headers.Add("Expires", "0")
+                $response.ContentLength64 = $bytes.Length
                 $response.OutputStream.Write($bytes, 0, $bytes.Length)
             } else {
                 $response.StatusCode = 404
