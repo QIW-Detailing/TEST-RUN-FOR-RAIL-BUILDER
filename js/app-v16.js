@@ -567,6 +567,78 @@ function getResolvedPanelProperties(panel, style) {
 }
 window.getResolvedPanelProperties = getResolvedPanelProperties;
 
+function formatFeetInchesToInchString(str) {
+    if (typeof str !== 'string') return '';
+    str = str.trim();
+    if (!str) return '';
+    if (/^\d+(?:\.\d+)?$/.test(str)) {
+        return str;
+    }
+    let feet = 0;
+    let inches = 0;
+    const feetMatch = str.match(/(\d+)\s*'/);
+    if (feetMatch) {
+        feet = parseInt(feetMatch[1]);
+    }
+    let rest = str;
+    if (str.includes("'")) {
+        rest = str.substring(str.indexOf("'") + 1).replace(/-/g, '').trim();
+    }
+    rest = rest.replace(/"/g, '').trim();
+    if (rest) {
+        if (rest.includes('/')) {
+            const parts = rest.split(/\s+/);
+            if (parts.length === 2) {
+                const whole = parseFloat(parts[0]) || 0;
+                inches += whole;
+                const fracParts = parts[1].split('/');
+                if (fracParts.length === 2) {
+                    inches += parseFloat(fracParts[0]) / parseFloat(fracParts[1]);
+                }
+            } else if (parts.length === 1) {
+                if (parts[0].includes('/')) {
+                    const fracParts = parts[0].split('/');
+                    if (fracParts.length === 2) {
+                        inches += parseFloat(fracParts[0]) / parseFloat(fracParts[1]);
+                    }
+                } else {
+                    inches += parseFloat(parts[0]) || 0;
+                }
+            }
+        } else {
+            inches += parseFloat(rest) || 0;
+        }
+    }
+    const totalInches = feet * 12 + inches;
+    const wholeInches = Math.floor(totalInches);
+    const fracVal = totalInches - wholeInches;
+    let fracStr = '';
+    if (Math.abs(fracVal - 0.5) < 0.01) fracStr = ' 1/2';
+    else if (Math.abs(fracVal - 0.25) < 0.01) fracStr = ' 1/4';
+    else if (Math.abs(fracVal - 0.75) < 0.01) fracStr = ' 3/4';
+    else if (Math.abs(fracVal - 0.125) < 0.01) fracStr = ' 1/8';
+    else if (Math.abs(fracVal - 0.375) < 0.01) fracStr = ' 3/8';
+    else if (Math.abs(fracVal - 0.625) < 0.01) fracStr = ' 5/8';
+    else if (Math.abs(fracVal - 0.875) < 0.01) fracStr = ' 7/8';
+    else if (Math.abs(fracVal - 0.0625) < 0.001) fracStr = ' 1/16';
+    else if (Math.abs(fracVal - 0.1875) < 0.001) fracStr = ' 3/16';
+    else if (Math.abs(fracVal - 0.3125) < 0.001) fracStr = ' 5/16';
+    else if (Math.abs(fracVal - 0.4375) < 0.001) fracStr = ' 7/16';
+    else if (Math.abs(fracVal - 0.5625) < 0.001) fracStr = ' 9/16';
+    else if (Math.abs(fracVal - 0.6875) < 0.001) fracStr = ' 11/16';
+    else if (Math.abs(fracVal - 0.8125) < 0.001) fracStr = ' 13/16';
+    else if (Math.abs(fracVal - 0.9375) < 0.001) fracStr = ' 15/16';
+    
+    if (fracStr !== '') {
+        return (wholeInches > 0 ? wholeInches.toString() : '') + fracStr;
+    } else {
+        if (fracVal > 0) {
+            return (Math.round(totalInches * 100) / 100).toString();
+        }
+        return wholeInches.toString();
+    }
+}
+
 function parseMeshSpec(meshType, spec, heightVal) {
     const clean = (spec || '').trim();
     const formattedHeight = formatFraction(heightVal).replace(/"/g, '');
@@ -6799,6 +6871,33 @@ document.addEventListener('DOMContentLoaded', () => {
                     .replace(/^PL\s*/i, '')
                     .replace(/^FB\s*/i, '')
                     .trim();
+
+                // FB / PL dimension formatting for FBOM: ThicknessXwidth instead of WidthXThickness
+                if (shapeCol === 'FB' || shapeCol === 'PL') {
+                    const parts = dimCol.split(/X/i);
+                    if (parts.length === 2) {
+                        dimCol = `${parts[1].trim()}X${parts[0].trim()}`;
+                    }
+                }
+
+                // WWM dimension formatting for FBOM: e.g., 2X2 * 0.135 * 38 instead of 2X2X0.135 X 3'-2"
+                if (shapeCol === 'WWM') {
+                    const wwmMatch = dimCol.match(/(\d+\s*X\s*\d+)\s*[X*]\s*([0-9.#\/]+)\s*[X*]?\s*(.*)/i);
+                    if (wwmMatch) {
+                        const grid = wwmMatch[1].replace(/\s+/g, '').toUpperCase();
+                        let wire = wwmMatch[2].trim();
+                        if (wire.startsWith('.')) {
+                            wire = '0' + wire;
+                        }
+                        const heightStr = wwmMatch[3].trim();
+                        const heightInches = formatFeetInchesToInchString(heightStr);
+                        if (heightInches) {
+                            dimCol = `${grid} * ${wire} * ${heightInches}`;
+                        } else {
+                            dimCol = `${grid} * ${wire} * ${heightStr}`;
+                        }
+                    }
+                }
 
                 const lengthCol = item.len;
                 const gradeCol = item.grade || (item.shape.toUpperCase() === 'WWM' ? 'WELDED' : ((item.shape.toLowerCase().includes('plate') || item.shape.toLowerCase().includes('pl') || item.shape.toLowerCase().includes('fb') || item.shape.toLowerCase().includes('flat') || item.shape.toLowerCase().includes('bar')) ? 'A36' : 'A500'));
